@@ -1,0 +1,4 @@
+# LangChain 1.x prompt templates and messages, plus the Groq chat model
+langchain-core>=1.0,<2
+langchain-groq>=1.0,<2
+python-dotenv
