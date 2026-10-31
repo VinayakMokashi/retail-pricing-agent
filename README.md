@@ -1,13 +1,14 @@
 # Retail Pricing Agent
 
-An LLM agent that recommends a selling price for a retail product from five inputs — **cost price, current price, target margin, competitor price and price elasticity** — built with [LangChain](https://python.langchain.com/) and [Groq](https://groq.com/)-hosted `gpt-oss` models.
+An LLM agent for pricing work, built with [LangChain](https://python.langchain.com/) and [Groq](https://groq.com/)-hosted `gpt-oss` models. It recommends a selling price for a retail product from five inputs — **cost price, current price, target margin, competitor price and price elasticity** — and answers questions from a **price list** using retrieval.
 
-The project is built in stages, each in its own folder, so every stage can be run and compared with the ones before it. Stage 1 is a **prompt-only baseline**: everything the agent knows and does comes from its prompts, with no tools and no data lookup.
+The project is built in stages, each in its own folder, so every stage can be run and compared with the ones before it. Stage 1 is a **prompt-only baseline**: everything the agent knows and does comes from its prompts, with no tools and no data lookup. Stage 2 adds **retrieval**: a RAG agent that reads a price list, with chunking strategies scored on the same questions.
 
 | Stage | Folder | What it adds | Status |
 | --- | --- | --- | --- |
 | 1 | [`01_prompt_only/`](01_prompt_only/) | Prompt-only baseline: four prompting strategies compared on the same product | ✅ Done |
-| 2+ | — | Structured, validated output; tool calls for exact arithmetic; retrieval of product and competitor data; evaluation across many products | Planned |
+| 2 | [`02_rag_chunking/`](02_rag_chunking/) | Retrieval: a RAG agent that answers from a price list, with chunking strategies scored on the same questions | ✅ Done |
+| 3+ | — | Structured, validated output; tool calls for exact arithmetic; retrieval of product and competitor data; evaluation across many products | Planned |
 
 ## Repository structure
 
@@ -16,6 +17,10 @@ retail-pricing-agent/
 ├── 01_prompt_only/
 │   ├── pricing_agent.py            # prompts, PricingAgent class and command-line interface
 │   └── prompt_only_pricing.ipynb   # walkthrough: runs and compares every strategy (with saved outputs)
+├── 02_rag_chunking/
+│   ├── pricing_guide.md            # the price list the agent reads (fictional)
+│   ├── pricing_rag.py              # chunking strategies, RAG chain, scoring, HyDE and command-line interface
+│   └── rag_chunking_comparison.ipynb  # walkthrough: every strategy, failure and fix (with saved outputs)
 ├── requirements.txt
 ├── .env.example                    # template for your Groq API key
 └── LICENSE
@@ -72,13 +77,83 @@ From the run saved in the [walkthrough notebook](01_prompt_only/prompt_only_pric
 
 On the hardest case — a competitor priced **below** the margin floor ($420 vs a $461.54 floor) — the agent held the price at $462 (35.1% margin) rather than matching the competitor. The notebook's observations cover the rest: why structure buys stability, why terms and rules need precise wording, and why prompt-only arithmetic needs checking.
 
+## Stage 2 — retrieval from a price list
+
+Stage 1 only knew the numbers typed into its prompt. Stage 2 gives the agent a document to read: it retrieves passages from a price list and answers from those passages alone. The agent itself is simple, so the stage focuses on the decision that matters most in RAG, **how to cut the document into chunks**.
+
+### The price list
+
+[`pricing_guide.md`](02_rag_chunking/pricing_guide.md) is a fictional software price list ("DataFlow Platform"): three products with 10 plans, plus bundles, add-ons and billing policies. It makes a good test because plans in different products share names and prices (there are two Enterprise plans, and $99 buys either Analytics Pro or a seat of CRM Scale), and every price appears only in a header. This stage answers questions about a price list; it is not yet connected to the selling-price recommender in stage 1.
+
+### How the agent works
+
+```
+question ─► embed (all-MiniLM-L6-v2, local) ─► Chroma: top 5 chunks ─┐
+                                                                     ├─► ChatGroq (openai/gpt-oss-20b) ─► answer
+PRICING_PROMPT (answer ONLY from the context, or refuse) ────────────┘
+```
+
+- **`STRATEGIES`** holds every chunking strategy, so they all run through the same code.
+- **`build_store()`** embeds chunks into an in-memory Chroma collection, so nothing is written to disk.
+- **`build_rag_chain()`** connects retrieval, the prompt and the model, and **`ask()`** raises an error if an answer was cut off by `max_tokens` instead of returning it silently.
+- **`score_strategy()`** measures retrieval with no model involved, so its results are identical on every run.
+- **`keyword_search()`** and **`hypothetical_answer()`** provide BM25 search and HyDE for vague questions.
+
+### Chunking strategies
+
+| Strategy | How it cuts |
+| --- | --- |
+| `fixed-300` | Fixed-size windows, cut at line breaks |
+| `recursive-100/300/600` | Recursive splitting: paragraphs first, then lines, then words |
+| `markdown-default` | One chunk per section, headers moved into metadata |
+| `markdown-contextual` | The same sections, with product and plan names written back into the text (the default) |
+| `semantic` | New chunk where embedding similarity between sentences drops |
+
+### Results
+
+Every strategy was scored on 13 questions covering 18 facts, retrieving the top 4 chunks. **Facts found** counts exact strings that reached the context. **Attributed** counts only those in a chunk that also names the right product.
+
+| Strategy | Chunks | Facts found | Attributed | Characters sent to the model |
+| --- | ---: | ---: | ---: | ---: |
+| `fixed-300` | 17 | 16 | 10 | 1,116 |
+| `recursive-100` | 64 | 12 | 8 | 283 |
+| `recursive-300` | 22 | 15 | 10 | 974 |
+| `recursive-600` | 10 | 17 | 9 | 1,812 |
+| `markdown-default` | 17 | 10 | 5 | 975 |
+| **`markdown-contextual`** | **17** | **18** | **18** | **1,128** |
+| `semantic` | 8 | 18 | 18 | 3,164 |
+
+`semantic` matches the score only because one chunk holds 66% of the document: bullet lines have no sentence-ending punctuation, so most of the price list counts as one sentence. These numbers come from a small hand-written question set on one 4.5 KB document, and Attributed rewards exactly what `markdown-contextual` adds, so they show a direction and are not a benchmark.
+
+The sample questions show what those differences mean in practice. Each answer below was checked against the guide:
+
+| Question | Baseline (`recursive-300`, k=4) | Final agent (`markdown-contextual`, k=5) |
+| --- | --- | --- |
+| What is in the Analytics Pro plan? | ❌ Refused | ✅ All 10 features |
+| Plan for a team of 10 needing CRM? | ✅ | ✅ |
+| Annual discount? | ⚠️ 20%, but lists "Free Trials" as a plan | ✅ |
+| Which plans include HIPAA? | ✅ But no product names | ✅ |
+| Enterprise plan cost? | ⚠️ Both prices, no product names | ✅ Both, with products |
+| Student discount? | ✅ Refused | ✅ Refused |
+| Suite Bundle saving? | ⚠️ Repeats "35%" | ⚠️ Repeats "35%" |
+
+### What the failures showed
+
+- **The Pro plan refusal was a chunking failure.** The retrieved chunk says "Pro Plan" but never "Analytics", because that heading landed in a different chunk. It repeats on every run.
+- **The markdown splitter's default loses every price.** It moves headers into metadata, and only the text is embedded and sent to the model, so none of its 17 chunks contains a price. `strip_headers=False` isn't enough either, because the product header appears only once per product.
+- **Two answers lost a plan for different reasons.** The Enterprise question was a retrieval miss: the Analytics Enterprise plan ranked fifth, so `k` went from 4 to 5. HIPAA was the model's reading: both plans were in the context, but it named both only 3 of 4 times at `k=4` and at most 1 of 4 at `k=5`, until one prompt line said a rule for a group of plans applies to every plan in it (then 4 of 4 at both, on every run).
+- **RAG repeats what the source says.** The guide claims the $149 bundle saves 35%, but its list prices come to $177 with one CRM seat, a saving of 15.8%. About 35% needs two seats. Catching that needs a calculation, not retrieval.
+
+The [walkthrough notebook](02_rag_chunking/rag_chunking_comparison.ipynb) shows every step, plus semantic chunking and HyDE, with saved outputs.
+
 ## Tech stack
 
 - Python 3.10+
 - `langchain-core` + `langchain-groq` 1.x (prompt templates, messages and the Groq chat model)
 - `python-dotenv` (loads your API key from a `.env` file)
-- Groq-hosted model: `openai/gpt-oss-120b`
-- Jupyter (optional, to run the walkthrough notebook)
+- Groq-hosted models: `openai/gpt-oss-120b` (stage 1) and `openai/gpt-oss-20b` (stage 2, where the model reads prices out of retrieved text and needs far less reasoning)
+- Stage 2 only: `langchain-text-splitters` and `langchain-experimental` (chunking), `langchain-chroma` (vector store), `langchain-huggingface` with `sentence-transformers` (local `all-MiniLM-L6-v2` embeddings), `rank-bm25` (keyword search)
+- Jupyter (optional, to run the walkthrough notebooks)
 
 ## Setup
 
@@ -105,6 +180,8 @@ On the hardest case — a competitor priced **below** the margin floor ($420 vs 
    pip install -r requirements.txt
    ```
 
+   Stage 2 installs PyTorch through `sentence-transformers`, so this can take a few minutes. Its first run also downloads the embedding model (about 90 MB).
+
 4. **Add your Groq API key.** Copy `.env.example` to `.env` at the repository root and paste in your key
    (get a free one at https://console.groq.com/keys):
 
@@ -116,12 +193,12 @@ On the hardest case — a competitor priced **below** the margin floor ($420 vs 
    GROQ_API_KEY=your_groq_api_key_here
    ```
 
-   `pricing_agent.py` loads `.env` from the repository root, so the key is found no matter which
+   Both stages load `.env` from the repository root, so the key is found no matter which
    directory you launch from. `.env` is git-ignored and never committed.
 
 ## How to run
 
-### Command line
+### Stage 1 command line
 
 ```bash
 # Price the reference product with the agent
@@ -163,14 +240,54 @@ Product: cost $400, current $599, target margin 25%, competitor $579, elasticity
 
 Answers vary from run to run; the notebook shows how much.
 
-### Walkthrough notebook
+### Stage 2 command line
+
+```bash
+# Answer the sample questions with the default strategy (markdown-contextual, top 5 chunks)
+python 02_rag_chunking/pricing_rag.py
+
+# Ask your own question
+python 02_rag_chunking/pricing_rag.py --question "Which storage plan has the best uptime?"
+
+# Try another chunking strategy
+python 02_rag_chunking/pricing_rag.py --strategy recursive-300 --k 4
+
+# Score every strategy on retrieval only (no API key needed)
+python 02_rag_chunking/pricing_rag.py --compare
+
+# Compare keyword search with and without HyDE
+python 02_rag_chunking/pricing_rag.py --hyde "affordable option for a small startup with basic needs"
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--question` | Sample questions | The question to ask |
+| `--strategy` | `markdown-contextual` | Any strategy in the table above |
+| `--k` | 5 | Number of chunks to retrieve |
+| `--compare` | Off | Score every strategy on retrieval only, with no model calls |
+| `--hyde` | Off | Takes a question and compares keyword search with and without HyDE |
+
+Sample output for the ambiguous Enterprise question:
+
+```
+Strategy: markdown-contextual, top 5 chunks
+
+Q: How much does the Enterprise plan cost?
+A: The Enterprise plans are priced as follows:
+
+- **DataFlow CRM – Enterprise Plan**: **$199 per user per month**
+- **DataFlow Analytics – Enterprise Plan**: **Custom pricing, starting at $500 per month**
+```
+
+### Walkthrough notebooks
 
 ```bash
 pip install jupyter
 jupyter notebook 01_prompt_only/prompt_only_pricing.ipynb
+jupyter notebook 02_rag_chunking/rag_chunking_comparison.ipynb
 ```
 
-The notebook is saved with its outputs, so you can read the full comparison on GitHub without running it. Running it makes 12 model calls.
+Both notebooks are saved with their outputs, so you can read the full comparisons on GitHub without running them. Running them makes 12 and 38 model calls.
 
 ### From Python
 
@@ -191,6 +308,14 @@ print(agent.get_price_recommendation(cost_price=400, current_price=599, target_m
 - **Free-text output.** The recommended price has to be pattern-matched out of prose.
 
 These limitations define the next stages.
+
+## Limitations of the retrieval stage
+
+- **Small evaluation.** 13 hand-written questions on one short document show a direction, not a benchmark.
+- **It relies on clean headers.** `markdown-contextual` works because the document has them. A messy PDF would need a different approach.
+- **Rank order is fragile.** The Enterprise failure was one rank away, and raising `k` is a blunt fix. Reranking, or using the `Plan` metadata to fetch every plan with a matching name, would be sturdier.
+- **No arithmetic.** The agent repeats whatever the document claims, so checking a saving needs a calculation tool.
+- **Not connected to stage 1.** The two stages run separately for now.
 
 ## License
 
