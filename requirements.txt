@@ -2,3 +2,11 @@
 langchain-core>=1.0,<2
 langchain-groq>=1.0,<2
 python-dotenv
+
+# Stage 2: chunking, vector store, local embeddings and keyword search
+langchain-text-splitters>=1.0,<2
+langchain-experimental
+langchain-chroma>=1.0,<2
+langchain-huggingface>=1.0,<2
+sentence-transformers
+rank-bm25
