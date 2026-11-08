@@ -1,0 +1,77 @@
+{
+  "elasticity_benchmarks": [
+    {
+      "category": "Sports & Fitness",
+      "elasticity": "Medium",
+      "coefficient": "-0.9 to -1.6",
+      "notes": "Small accessories (mats, bands, bottles) are impulse buys and not price-sensitive. Big-ticket equipment (treadmills, exercise bikes) is researched online and behaves like High elasticity. Demand peaks in January and before summer."
+    }
+  ],
+  "historical_margins": [
+    {
+      "category": "Sports & Fitness",
+      "avg_margin": "38%",
+      "typical_range": "25-35% for equipment, 45-55% for accessories",
+      "notes": "Equipment priced above competitors sold slowly and took up storage space."
+    }
+  ],
+  "pricing_decisions": [
+    {
+      "product": "Boldfit Yoga Mat 6mm",
+      "category": "Sports & Fitness",
+      "cost": 380,
+      "recommended_price": 699,
+      "competitor_price": 749,
+      "elasticity": "Medium",
+      "outcome": "Successful - steady impulse sales from the checkout display",
+      "reasoning": "Small accessory priced ₹50 below the competitor"
+    },
+    {
+      "product": "Resistance Bands Set",
+      "category": "Sports & Fitness",
+      "cost": 280,
+      "recommended_price": 599,
+      "competitor_price": 549,
+      "elasticity": "Low",
+      "outcome": "Successful - sold mostly in a ₹1,199 bundle with yoga mats",
+      "reasoning": "Bundled with mats, so shoppers did not compare the single price"
+    },
+    {
+      "product": "Cosco Football Size 5",
+      "category": "Sports & Fitness",
+      "cost": 420,
+      "recommended_price": 799,
+      "competitor_price": 749,
+      "elasticity": "Medium",
+      "outcome": "Successful - school-season demand held at ₹50 above the competitor",
+      "reasoning": "A trusted brand for school teams"
+    },
+    {
+      "product": "Adjustable Dumbbells 20kg",
+      "category": "Sports & Fitness",
+      "cost": 2600,
+      "recommended_price": 3999,
+      "competitor_price": 4299,
+      "elasticity": "High",
+      "outcome": "Successful - January sales 30% above plan",
+      "reasoning": "Priced 7% below the competitor before the January peak"
+    },
+    {
+      "product": "Motorised Treadmill 2HP",
+      "category": "Sports & Fitness",
+      "cost": 24000,
+      "recommended_price": 32999,
+      "competitor_price": 31499,
+      "elasticity": "High",
+      "outcome": "Unsuccessful - sales 30% below plan until the price was matched at ₹31,499 in week 5",
+      "reasoning": "Priced 5% above the competitor on a big-ticket item that buyers research online"
+    }
+  ],
+  "competitor_trends": [
+    {
+      "category": "Sports & Fitness",
+      "trend": "Store brands of large sports chains set low prices on basics. Online marketplaces discount fitness equipment 5-10% in January, and equipment buyers compare several listings before buying."
+    }
+  ],
+  "pricing_guidelines": []
+}

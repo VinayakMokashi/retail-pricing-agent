@@ -1,0 +1,416 @@
+{
+  "elasticity_benchmarks": [
+    {
+      "category": "Electronics",
+      "elasticity": "High",
+      "coefficient": "-1.5 to -2.5",
+      "notes": "A 5% price rise typically cuts unit sales by 8-12%. Shoppers compare prices online before buying, and festive sales (October-November) bring about 35% of yearly volume."
+    },
+    {
+      "category": "Footwear",
+      "elasticity": "High",
+      "coefficient": "-1.4 to -2.0",
+      "notes": "Branded sneakers with similar designs are easy to compare, so a 5% price rise cuts units by 7-10%. Store-brand footwear is less compared (Medium elasticity). The festive season sells about 30% of yearly volume."
+    },
+    {
+      "category": "Apparel",
+      "elasticity": "Medium",
+      "coefficient": "-0.8 to -1.3",
+      "notes": "Style and fit matter more than price for fashion items. Basics such as plain T-shirts and jeans behave like High elasticity because they are easy to compare."
+    },
+    {
+      "category": "Luxury Goods",
+      "elasticity": "Low",
+      "coefficient": "-0.2 to -0.6",
+      "notes": "Price signals exclusivity. Demand is driven by brand, scarcity and gifting seasons, and discounts can damage how customers see the brand."
+    },
+    {
+      "category": "Groceries",
+      "elasticity": "Low",
+      "coefficient": "-0.3 to -0.6",
+      "notes": "Staples are necessities, so total demand barely moves with price, but shoppers notice the prices of key value items (rice, oil, milk, atta) and switch stores over them."
+    },
+    {
+      "category": "Home & Kitchen",
+      "elasticity": "Medium",
+      "coefficient": "-1.0 to -1.4",
+      "notes": "Cookware and appliances are compared online, but brand trust and warranty let well-known brands sell slightly above unbranded alternatives."
+    }
+  ],
+  "historical_margins": [
+    {
+      "category": "Electronics",
+      "avg_margin": "14%",
+      "typical_range": "8-25%",
+      "notes": "Smartphones 8-12%, laptops and TVs 10-15%, audio 18-25%, accessories 35-55%. Thin margins on big items are made up by accessories sold with them."
+    },
+    {
+      "category": "Footwear",
+      "avg_margin": "36%",
+      "typical_range": "30-40% for branded, 45-55% for store brand",
+      "notes": "Branded sneakers priced above a 40% margin sold less than 60% of stock at full price."
+    },
+    {
+      "category": "Apparel",
+      "avg_margin": "50%",
+      "typical_range": "40-60%",
+      "notes": "End-of-season markdowns of 20-35% bring the realised margin down to about 42%."
+    },
+    {
+      "category": "Luxury Goods",
+      "avg_margin": "58%",
+      "typical_range": "40-65%",
+      "notes": "Full-price sell-through matters more than margin; discounts above 10% have not paid off."
+    },
+    {
+      "category": "Groceries",
+      "avg_margin": "11%",
+      "typical_range": "5-30%",
+      "notes": "Staples 5-10%, packaged snacks and beverages 25-30%."
+    },
+    {
+      "category": "Home & Kitchen",
+      "avg_margin": "38%",
+      "typical_range": "30-45%",
+      "notes": "Products priced more than 10% above competitors needed clearance markdowns."
+    }
+  ],
+  "pricing_decisions": [
+    {
+      "product": "Samsung Galaxy Smartphone",
+      "category": "Electronics",
+      "cost": 45000,
+      "recommended_price": 49900,
+      "competitor_price": 52900,
+      "elasticity": "High",
+      "outcome": "Successful - gained 15% market share",
+      "reasoning": "Aggressive pricing in high elasticity category drove volume"
+    },
+    {
+      "product": "boAt Airdopes Wireless Earbuds",
+      "category": "Electronics",
+      "cost": 1150,
+      "recommended_price": 1499,
+      "competitor_price": 1599,
+      "elasticity": "High",
+      "outcome": "Successful - became the best-selling audio product",
+      "reasoning": "Priced ₹100 below the competitor at a psychological price point"
+    },
+    {
+      "product": "Sony Noise-Cancelling Headphones",
+      "category": "Electronics",
+      "cost": 21500,
+      "recommended_price": 26990,
+      "competitor_price": 26490,
+      "elasticity": "High",
+      "outcome": "Unsuccessful - sales 20% below plan as shoppers bought from the cheaper competitor",
+      "reasoning": "Priced ₹500 above the competitor to protect a 20% margin"
+    },
+    {
+      "product": "HP 15-inch Laptop",
+      "category": "Electronics",
+      "cost": 48000,
+      "recommended_price": 54990,
+      "competitor_price": 55990,
+      "elasticity": "High",
+      "outcome": "Successful - 25% more units than the previous model",
+      "reasoning": "Stayed ₹1,000 below the competitor while keeping a margin in the laptop range"
+    },
+    {
+      "product": "LG 43-inch Smart TV",
+      "category": "Electronics",
+      "cost": 27000,
+      "recommended_price": 29990,
+      "competitor_price": 31490,
+      "elasticity": "High",
+      "outcome": "Successful - festive-season volume up 40%",
+      "reasoning": "Accepted a thin margin on the TV to drive festive traffic; wall mounts and soundbars sold with it at 35-40% margins made up the difference"
+    },
+    {
+      "product": "25W USB-C Fast Charger",
+      "category": "Electronics",
+      "cost": 380,
+      "recommended_price": 799,
+      "competitor_price": 849,
+      "elasticity": "Medium",
+      "outcome": "Successful - high attach rate with phone sales",
+      "reasoning": "Accessories are bought with the main product and rarely compared"
+    },
+    {
+      "product": "Puma Smash Sneakers",
+      "category": "Footwear",
+      "cost": 1650,
+      "recommended_price": 2399,
+      "competitor_price": 2499,
+      "elasticity": "High",
+      "outcome": "Successful - sold 92% of stock at full price in 10 weeks",
+      "reasoning": "Priced 4% below the closest competitor while keeping a margin above 30%"
+    },
+    {
+      "product": "Puma Softride Running Shoes",
+      "category": "Footwear",
+      "cost": 1950,
+      "recommended_price": 2999,
+      "competitor_price": 2899,
+      "elasticity": "High",
+      "outcome": "Unsuccessful - units fell 12% in 4 weeks; price reverted to ₹2,849",
+      "reasoning": "Raised the price 7% in one step (from ₹2,799) to recover a cost increase"
+    },
+    {
+      "product": "Nike Revolution Running Shoes",
+      "category": "Footwear",
+      "cost": 1900,
+      "recommended_price": 3299,
+      "competitor_price": 2899,
+      "elasticity": "High",
+      "outcome": "Unsuccessful - units 28% below plan; marked down 15% after 6 weeks, realised margin 32%",
+      "reasoning": "Tried to hold a 42% margin by pricing 14% above the competitor"
+    },
+    {
+      "product": "Skechers Go Walk Slip-ons",
+      "category": "Footwear",
+      "cost": 1500,
+      "recommended_price": 2199,
+      "competitor_price": 2299,
+      "elasticity": "High",
+      "outcome": "Successful - 18% more units than the previous season",
+      "reasoning": "Priced ₹100 under the competitor at a 99-ending price point"
+    },
+    {
+      "product": "Adidas Ultraboost Running Shoes",
+      "category": "Footwear",
+      "cost": 9500,
+      "recommended_price": 13999,
+      "competitor_price": 14499,
+      "elasticity": "Medium",
+      "outcome": "Successful - sold out in 5 weeks",
+      "reasoning": "Premium performance shoe with loyal buyers; stayed just below the competitor"
+    },
+    {
+      "product": "Store-brand Canvas Sneakers",
+      "category": "Footwear",
+      "cost": 600,
+      "recommended_price": 1199,
+      "competitor_price": 1299,
+      "elasticity": "Medium",
+      "outcome": "Successful - steady sales and the best margin in footwear",
+      "reasoning": "No identical product to compare against, so a 50% margin held"
+    },
+    {
+      "product": "Levi's 511 Slim Jeans",
+      "category": "Apparel",
+      "cost": 1600,
+      "recommended_price": 3299,
+      "competitor_price": 3199,
+      "elasticity": "Medium",
+      "outcome": "Successful - 78% sold at full price",
+      "reasoning": "Brand and fit justified ₹100 above the competitor"
+    },
+    {
+      "product": "Store-brand Cotton T-shirt",
+      "category": "Apparel",
+      "cost": 220,
+      "recommended_price": 499,
+      "competitor_price": 449,
+      "elasticity": "High",
+      "outcome": "Unsuccessful - units fell 22%; reduced to ₹449",
+      "reasoning": "Priced ₹50 above the competitor on a basic item that is easy to compare"
+    },
+    {
+      "product": "Winter Puffer Jacket",
+      "category": "Apparel",
+      "cost": 1800,
+      "recommended_price": 3999,
+      "competitor_price": 3799,
+      "elasticity": "Medium",
+      "outcome": "Mixed - 35% end-of-season markdown on the rest of the stock; realised margin 41%",
+      "reasoning": "Seasonal item priced above the competitor at launch"
+    },
+    {
+      "product": "Allen Solly Formal Shirt",
+      "category": "Apparel",
+      "cost": 900,
+      "recommended_price": 1899,
+      "competitor_price": 1999,
+      "elasticity": "Medium",
+      "outcome": "Successful - steady full-price sales",
+      "reasoning": "Office-wear staple priced just under the competitor"
+    },
+    {
+      "product": "Michael Kors Leather Handbag",
+      "category": "Luxury Goods",
+      "cost": 14000,
+      "recommended_price": 34900,
+      "competitor_price": 35500,
+      "elasticity": "Low",
+      "outcome": "Successful - sold at full price through the gifting season",
+      "reasoning": "Kept close to the brand's recommended price; low elasticity allows a high margin"
+    },
+    {
+      "product": "Tissot Automatic Watch",
+      "category": "Luxury Goods",
+      "cost": 32000,
+      "recommended_price": 54500,
+      "competitor_price": 54500,
+      "elasticity": "Low",
+      "outcome": "Successful - steady sales with no discounting",
+      "reasoning": "Matched the brand's recommended price, as authorised stores do"
+    },
+    {
+      "product": "Hugo Boss Perfume 100ml",
+      "category": "Luxury Goods",
+      "cost": 3800,
+      "recommended_price": 8500,
+      "competitor_price": 7999,
+      "elasticity": "Low",
+      "outcome": "Successful - priced 6% above the competitor with no loss of volume",
+      "reasoning": "Shoppers buy on brand and for gifts, so a higher price did not cut volume"
+    },
+    {
+      "product": "Ray-Ban Sunglasses",
+      "category": "Luxury Goods",
+      "cost": 5200,
+      "recommended_price": 7990,
+      "competitor_price": 9490,
+      "elasticity": "Low",
+      "outcome": "Unsuccessful - a 20% discount from ₹9,990 raised units only 6%, and full-price buyers began waiting for sales",
+      "reasoning": "Tried to win volume with a discount in a low elasticity category"
+    },
+    {
+      "product": "India Gate Basmati Rice 5kg",
+      "category": "Groceries",
+      "cost": 520,
+      "recommended_price": 579,
+      "competitor_price": 589,
+      "elasticity": "Low",
+      "outcome": "Successful - store footfall up 6%",
+      "reasoning": "A key value item kept just below the competitor brings shoppers in"
+    },
+    {
+      "product": "Fortune Sunflower Oil 1L",
+      "category": "Groceries",
+      "cost": 140,
+      "recommended_price": 155,
+      "competitor_price": 145,
+      "elasticity": "Low",
+      "outcome": "Unsuccessful - shoppers complained and oil sales fell 15%",
+      "reasoning": "Priced a key value item 7% above the competitor"
+    },
+    {
+      "product": "Lay's Chips Family Pack",
+      "category": "Groceries",
+      "cost": 39,
+      "recommended_price": 55,
+      "competitor_price": 55,
+      "elasticity": "Low",
+      "outcome": "Successful - steady sales at the printed price",
+      "reasoning": "Packaged snacks sell at the printed price everywhere"
+    },
+    {
+      "product": "Prestige Pressure Cooker 5L",
+      "category": "Home & Kitchen",
+      "cost": 1350,
+      "recommended_price": 2149,
+      "competitor_price": 2199,
+      "elasticity": "Medium",
+      "outcome": "Successful - best-selling cookware item",
+      "reasoning": "Trusted brand priced just below the competitor"
+    },
+    {
+      "product": "Non-stick Cookware Set (3 pieces)",
+      "category": "Home & Kitchen",
+      "cost": 1900,
+      "recommended_price": 3499,
+      "competitor_price": 2999,
+      "elasticity": "Medium",
+      "outcome": "Unsuccessful - only 41% sold in 8 weeks; cleared at ₹2,899",
+      "reasoning": "Priced 17% above the competitor to reach a 46% margin"
+    },
+    {
+      "product": "Milton Steel Water Bottle 1L",
+      "category": "Home & Kitchen",
+      "cost": 390,
+      "recommended_price": 699,
+      "competitor_price": 749,
+      "elasticity": "Medium",
+      "outcome": "Successful - strong repeat sales",
+      "reasoning": "Low-cost item where a ₹50 gap under the competitor won the sale"
+    }
+  ],
+  "competitor_trends": [
+    {
+      "category": "Electronics",
+      "trend": "Online marketplaces sell smartphones, laptops and TVs 3-6% below store prices and add 5-10% bank-card offers in festive sales. Competitors match a price cut within 1-2 days, so a cut wins extra volume only briefly."
+    },
+    {
+      "category": "Footwear",
+      "trend": "Entry-level branded lifestyle sneakers cluster in the ₹2,199-₹2,999 band, and few sell above ₹3,000 without a performance feature. Online marketplaces list the same models 5-10% lower during sale events."
+    },
+    {
+      "category": "Apparel",
+      "trend": "Fast-fashion competitors start end-of-season sales (30-50% off) in late June and late December. Basics are priced to the rupee against competitors; fashion pieces are not directly comparable."
+    },
+    {
+      "category": "Luxury Goods",
+      "trend": "Brands set recommended prices and authorised competitors rarely discount. Grey-market online sellers list 10-20% below, but most luxury shoppers buy from authorised stores for authenticity and warranty."
+    },
+    {
+      "category": "Groceries",
+      "trend": "Competitors price key value items (rice, oil, milk, atta) 1-3% below the printed price to bring shoppers in. Quick-commerce apps charge 2-5% more but win on speed."
+    },
+    {
+      "category": "Home & Kitchen",
+      "trend": "Cookware prices are compared online. Competitors run bundle offers (buy 2, get 10% off) more often than straight price cuts."
+    }
+  ],
+  "pricing_guidelines": [
+    {
+      "title": "High elasticity: small price changes",
+      "applies_to": "High elasticity",
+      "rule": "Change prices in small steps of no more than 3-5% at a time, and stay within 3% of the main competitor. Prefer pricing slightly below the competitor when the margin allows.",
+      "rationale": "Price-sensitive shoppers switch quickly after a large increase, and competitors match large cuts within days."
+    },
+    {
+      "title": "Medium elasticity: price near the competitor",
+      "applies_to": "Medium elasticity",
+      "rule": "Price within 5% of the competitor. Go above it only when brand, quality or service clearly sets the product apart.",
+      "rationale": "Shoppers compare, but they will pay a little more for a product they prefer."
+    },
+    {
+      "title": "Low elasticity: protect price and brand",
+      "applies_to": "Low elasticity",
+      "rule": "Price at or up to 10% above the competitor when the brand justifies it, and avoid discounts above 10%.",
+      "rationale": "Volume barely changes with price, so discounts give away margin, and frequent sales teach customers to wait."
+    },
+    {
+      "title": "Never price below the margin floor",
+      "applies_to": "All categories",
+      "rule": "The minimum price is cost / (1 - target margin). If the market price is below this floor, keep the floor price and compete on value (bundles, service), or escalate to the category manager.",
+      "rationale": "A price below the floor misses the target margin on every unit sold."
+    },
+    {
+      "title": "Psychological price points",
+      "applies_to": "All categories",
+      "rule": "End mass-market prices in 99 or 49 (for example ₹2,499 or ₹2,599). Use round prices (for example ₹35,000) for luxury goods.",
+      "rationale": "Prices ending in 99 read as good value, but on luxury goods they look like a discount."
+    },
+    {
+      "title": "Passing on cost increases",
+      "applies_to": "All categories",
+      "rule": "Pass on cost increases in steps of no more than 5%. In high elasticity categories, absorb part of the increase for a season.",
+      "rationale": "A single large increase triggers the sharpest drop in volume."
+    },
+    {
+      "title": "Festive and sale periods",
+      "applies_to": "All categories",
+      "rule": "Use temporary festive discounts of 5-10% rather than permanent price cuts, and plan them 4-6 weeks ahead.",
+      "rationale": "A temporary discount wins seasonal volume without resetting the regular price."
+    },
+    {
+      "title": "Categories with no history",
+      "applies_to": "Categories with no history",
+      "rule": "If a category has no benchmarks or past decisions, start at the floor price for the target margin, stay within 5% of the competitor, and review after 4 weeks of sales.",
+      "rationale": "Without evidence, a cautious price limits the risk of a wrong guess."
+    }
+  ]
+}
