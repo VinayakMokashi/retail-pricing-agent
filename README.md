@@ -1,14 +1,15 @@
 # Retail Pricing Agent
 
-An LLM agent for pricing work, built with [LangChain](https://python.langchain.com/) and [Groq](https://groq.com/)-hosted `gpt-oss` models. It recommends a selling price for a retail product from five inputs — **cost price, current price, target margin, competitor price and price elasticity** — and answers questions from a **price list** using retrieval.
+An LLM agent for pricing work, built with [LangChain](https://python.langchain.com/) and [Groq](https://groq.com/)-hosted `gpt-oss` models. It recommends a selling price for a retail product from five inputs — **cost price, current price, target margin, competitor price and price elasticity** — answers questions from a **price list** using retrieval, and backs its recommendations with evidence from a **pricing knowledge base**.
 
-The project is built in stages, each in its own folder, so every stage can be run and compared with the ones before it. Stage 1 is a **prompt-only baseline**: everything the agent knows and does comes from its prompts, with no tools and no data lookup. Stage 2 adds **retrieval**: a RAG agent that reads a price list, with chunking strategies scored on the same questions.
+The project is built in stages, each in its own folder, so every stage can be run and compared with the ones before it. Stage 1 is a **prompt-only baseline**: everything the agent knows and does comes from its prompts, with no tools and no data lookup. Stage 2 adds **retrieval**: a RAG agent that reads a price list, with chunking strategies scored on the same questions. Stage 3 brings the two together: the recommender retrieves past pricing decisions, benchmarks and guidelines from a **knowledge base** and cites them.
 
 | Stage | Folder | What it adds | Status |
 | --- | --- | --- | --- |
 | 1 | [`01_prompt_only/`](01_prompt_only/) | Prompt-only baseline: four prompting strategies compared on the same product | ✅ Done |
 | 2 | [`02_rag_chunking/`](02_rag_chunking/) | Retrieval: a RAG agent that answers from a price list, with chunking strategies scored on the same questions | ✅ Done |
-| 3+ | — | Structured, validated output; tool calls for exact arithmetic; retrieval of product and competitor data; evaluation across many products | Planned |
+| 3 | [`03_pricing_knowledge_rag/`](03_pricing_knowledge_rag/) | Grounded recommendations: the recommender retrieves past decisions, benchmarks and guidelines from a knowledge base and cites them, compared with a prompt-only baseline | ✅ Done |
+| 4+ | — | Structured, validated output; tool calls for exact arithmetic; evaluation across many products | Planned |
 
 ## Repository structure
 
@@ -21,6 +22,11 @@ retail-pricing-agent/
 │   ├── pricing_guide.md            # the price list the agent reads (fictional)
 │   ├── pricing_rag.py              # chunking strategies, RAG chain, scoring, HyDE and command-line interface
 │   └── rag_chunking_comparison.ipynb  # walkthrough: every strategy, failure and fix (with saved outputs)
+├── 03_pricing_knowledge_rag/
+│   ├── knowledge_base.json         # benchmarks, margins, past decisions, competitor trends, guidelines (fictional, ₹)
+│   ├── new_category.json           # Sports & Fitness data, added in the new-category test
+│   ├── pricing_knowledge_rag.py    # documents, filtered retrieval, RAG agent, prompt-only baseline and CLI
+│   └── knowledge_rag_pricing.ipynb # walkthrough: retrieval design, comparisons and tests (with saved outputs)
 ├── requirements.txt
 ├── .env.example                    # template for your Groq API key
 └── LICENSE
@@ -146,13 +152,73 @@ The sample questions show what those differences mean in practice. Each answer b
 
 The [walkthrough notebook](02_rag_chunking/rag_chunking_comparison.ipynb) shows every step, plus semantic chunking and HyDE, with saved outputs.
 
+## Stage 3 — recommendations grounded in a pricing knowledge base
+
+Stage 1 priced a product from its five inputs and the model's own judgement, so every market fact in its answers came from the model's memory. Stage 3 gives the recommender a knowledge base of the company's pricing history to retrieve from, and requires it to cite every fact it uses.
+
+### The knowledge base
+
+[`knowledge_base.json`](03_pricing_knowledge_rag/knowledge_base.json) is fictional Indian retail data in rupees (₹) for six categories: Electronics, Footwear, Apparel, Luxury Goods, Groceries, and Home & Kitchen.
+
+| Kind | Records | Example |
+| --- | ---: | --- |
+| Elasticity benchmarks | 6 | Footwear: High; a 5% price rise cuts branded-sneaker sales by 7-10% |
+| Historical margins | 6 | Footwear averages 36%; above a 40% margin, branded sneakers sold under 60% of stock at full price |
+| Past pricing decisions | 26 | Puma Smash at ₹2,399, 4% below the competitor, sold 92% of its stock at full price |
+| Competitor trends | 6 | Entry-level branded sneakers cluster in the ₹2,199-₹2,999 band |
+| Pricing guidelines | 8 | High elasticity: move in steps of 3-5% and stay within 3% of the main competitor |
+
+The past decisions include failures on purpose, such as running shoes priced 14% above a competitor that sold 28% below plan, so the agent can learn what to avoid. [`new_category.json`](03_pricing_knowledge_rag/new_category.json) adds a seventh category, Sports & Fitness, with 5 more decisions, to test what happens when new knowledge arrives.
+
+### How the agent works
+
+```
+product inputs ─► one filtered search per kind of evidence (Chroma, local all-MiniLM-L6-v2 embeddings)
+                    ├─ the category's benchmark, margins and competitor trend (1 each)
+                    ├─ the category's 4 most similar past decisions
+                    └─ the guideline for the product's elasticity + the 2 closest general guidelines
+                                         │  10 numbered documents
+                                         ▼
+RAG_SYSTEM_PROMPT (persona, cite like [3], learn from outcomes, shared pricing rules)
+                                         ▼
+                    ChatGroq (openai/gpt-oss-120b) ─► margin floor, evidence, recommendation, risks
+```
+
+- **One record, one document.** Records are short and self-contained, so nothing is chunked. Each carries metadata: `doc_type`, `category`, `applies_to` (for guidelines) and a stable `doc_id`, so adding a record twice replaces it.
+- **Filtered searches instead of one similarity search.** A single search mixed in other categories, and for a high-elasticity query it ranked the *Low* elasticity guideline almost level with the *High* one, because the two share most of their words. Filtering on metadata guarantees every kind of evidence and picks the elasticity guideline by exact match.
+- **Unknown categories** get the guideline for categories with no history, and the model is told that no category data exists.
+- **A fair baseline.** `prompt_only_recommendation()` uses the same model, rules and answer sections with no knowledge base, so a comparison isolates what retrieval adds.
+- **`cited_numbers()`** reads the citations back out of an answer (gpt-oss often writes `【2】` instead of `[2]`), so you can see which retrieved records the answer used.
+
+### Results
+
+From the run saved in the [walkthrough notebook](03_pricing_knowledge_rag/knowledge_rag_pricing.ipynb):
+
+| Product | Inputs | Recommendation | What it rested on |
+| --- | --- | --- | --- |
+| Puma sneakers, RAG | cost ₹1,800, 30% margin, High | ₹2,599 (30.7%) | The sneaker price band [3] and the Puma Smash outcome [4]; 5 of 10 documents cited |
+| Puma sneakers, prompt only | same | ₹2,600 (30.8%) | An **invented** "usual" market range of ₹2,500-₹3,000, and a wrong claim that ₹2,600 is the lowest price meeting the margin |
+| Headphones, Electronics | cost ₹22,000, 18%, competitor ₹26,990, High | ₹26,899, ₹91 below the competitor | Headphones that lost sales at ₹500 above a competitor, earbuds that sold well at ₹100 below |
+| Handbag, Luxury Goods | cost ₹16,000, 55%, competitor ₹38,500, Low | ₹36,000, 6.5% below the competitor | ⚠️ Contradicts the Low elasticity guideline it cites, which says to price at or above the competitor |
+| Exercise bike, no Sports & Fitness data | cost ₹9,800, 30%, competitor ₹14,499 | ₹14,499, equal to the competitor | The guideline for categories with no history; it said no category data exists |
+| Exercise bike, with the new data | same | ₹14,099, 2.8% below the competitor | Big-ticket equipment behaves like High elasticity [1]; a treadmill priced 5% above a competitor sold 30% below plan [7] |
+
+### What the results showed
+
+- **Retrieval replaced invented market facts with cited ones,** and citations make the rest checkable. The RAG answer still contained one competitor range that no record supports, and a later answer cited the wrong record for a number; both are quick to find because every claim is supposed to point at a record.
+- **Citing a rule is not following it.** The luxury answer cited the right guideline, then priced below the competitor anyway. An earlier run with the same prompt chose ₹40,000, above it. A rule that must always hold has to be checked in code.
+- **New knowledge changes answers immediately.** Adding 8 documents moved the exercise bike from a cautious copy of the competitor's price to an evidence-based price just below it, with no retraining.
+- **A small embedding model misses obvious links.** The treadmill, the most relevant decision for an exercise bike, ranks only fourth of the five Sports & Fitness decisions, so the agent fetches 4 decisions, not 3.
+
 ## Tech stack
 
 - Python 3.10+
 - `langchain-core` + `langchain-groq` 1.x (prompt templates, messages and the Groq chat model)
 - `python-dotenv` (loads your API key from a `.env` file)
-- Groq-hosted models: `openai/gpt-oss-120b` (stage 1) and `openai/gpt-oss-20b` (stage 2, where the model reads prices out of retrieved text and needs far less reasoning)
-- Stage 2 only: `langchain-text-splitters` and `langchain-experimental` (chunking), `langchain-chroma` (vector store), `langchain-huggingface` with `sentence-transformers` (local `all-MiniLM-L6-v2` embeddings), `rank-bm25` (keyword search)
+- Groq-hosted models: `openai/gpt-oss-120b` (stages 1 and 3) and `openai/gpt-oss-20b` (stage 2, where the model reads prices out of retrieved text and needs far less reasoning)
+- Stages 2 and 3: `langchain-chroma` (vector store) and `langchain-huggingface` with `sentence-transformers` (local `all-MiniLM-L6-v2` embeddings)
+- Stage 2 only: `langchain-text-splitters` and `langchain-experimental` (chunking), `rank-bm25` (keyword search)
+- Stage 3 walkthrough notebook: `pandas` (tables)
 - Jupyter (optional, to run the walkthrough notebooks)
 
 ## Setup
@@ -180,7 +246,7 @@ The [walkthrough notebook](02_rag_chunking/rag_chunking_comparison.ipynb) shows 
    pip install -r requirements.txt
    ```
 
-   Stage 2 installs PyTorch through `sentence-transformers`, so this can take a few minutes. Its first run also downloads the embedding model (about 90 MB).
+   Stages 2 and 3 install PyTorch through `sentence-transformers`, so this can take a few minutes. The first run also downloads the embedding model (about 90 MB).
 
 4. **Add your Groq API key.** Copy `.env.example` to `.env` at the repository root and paste in your key
    (get a free one at https://console.groq.com/keys):
@@ -279,15 +345,70 @@ A: The Enterprise plans are priced as follows:
 - **DataFlow Analytics – Enterprise Plan**: **Custom pricing, starting at $500 per month**
 ```
 
+### Stage 3 command line
+
+```bash
+# Price the reference product (Puma sneakers) and list the documents retrieved
+python 03_pricing_knowledge_rag/pricing_knowledge_rag.py
+
+# Price your own product (prices in ₹)
+python 03_pricing_knowledge_rag/pricing_knowledge_rag.py --product "Wireless Noise-Cancelling Headphones" --category Electronics --cost 22000 --current 27990 --margin 18 --competitor 26990 --elasticity high
+
+# Compare with the prompt-only baseline on the same product
+python 03_pricing_knowledge_rag/pricing_knowledge_rag.py --compare
+
+# Add the Sports & Fitness data and let the agent find the elasticity itself
+python 03_pricing_knowledge_rag/pricing_knowledge_rag.py --add-new-category --product "Magnetic Exercise Bike" --category "Sports & Fitness" --cost 9800 --margin 30 --competitor 14499 --no-elasticity
+
+# See what a similarity search returns, with distances (no API key needed)
+python 03_pricing_knowledge_rag/pricing_knowledge_rag.py --explore "high elasticity pricing strategy"
+python 03_pricing_knowledge_rag/pricing_knowledge_rag.py --explore "Coach Leather Handbag" --filter-category "Luxury Goods"
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--product` | Puma Sneakers | Product name |
+| `--category` | Footwear | Category; an unknown category gets the no-history guideline |
+| `--cost` | 1800 | Cost price in ₹ |
+| `--current` | none | Current selling price in ₹ |
+| `--margin` | 30 | Target gross margin in percent, on selling price (0 ≤ margin < 100) |
+| `--competitor` | none | Competitor price in ₹ |
+| `--elasticity` | High | `low`, `medium` or `high` (case-insensitive) |
+| `--no-elasticity` | Off | Leave elasticity out, so the agent takes it from the category benchmark |
+| `--compare` | Off | Also price the product with the prompt-only baseline |
+| `--add-new-category` | Off | Add the Sports & Fitness data from `new_category.json` first |
+| `--explore` | Off | Takes a query and prints the matching documents with distances, without calling the model |
+| `--filter-category` | none | With `--explore`: search one category only |
+| `--k` | 5 | With `--explore`: number of results |
+
+Sample output for the reference product, abridged:
+
+```
+Knowledge retrieved:
+  [1] benchmark:Footwear
+  [2] margins:Footwear
+  [3] trend:Footwear
+  [4] decision:Puma Smash Sneakers
+  ...
+  [10] guideline:Passing on cost increases
+
+**1. Margin floor**
+Target margin = 30 % → Minimum price = Cost ÷ (1 – target) = 1,800 ÷ 0.70 = **₹2,571.43**.
+...
+**3. Recommendation**
+Set the selling price at **₹2,599**.
+```
+
 ### Walkthrough notebooks
 
 ```bash
 pip install jupyter
 jupyter notebook 01_prompt_only/prompt_only_pricing.ipynb
 jupyter notebook 02_rag_chunking/rag_chunking_comparison.ipynb
+jupyter notebook 03_pricing_knowledge_rag/knowledge_rag_pricing.ipynb
 ```
 
-Both notebooks are saved with their outputs, so you can read the full comparisons on GitHub without running them. Running them makes 12 and 38 model calls.
+All three notebooks are saved with their outputs, so you can read the full comparisons on GitHub without running them. Running them makes 12, 38 and 6 model calls.
 
 ### From Python
 
@@ -298,6 +419,15 @@ from pricing_agent import PricingAgent
 agent = PricingAgent()
 print(agent.get_price_recommendation(cost_price=400, current_price=599, target_margin=25,
                                      competitor_price=579, price_elasticity="Medium"))
+```
+
+```python
+# run from inside 03_pricing_knowledge_rag/
+from pricing_knowledge_rag import RAGPricingAgent, build_store, make_embeddings
+
+agent = RAGPricingAgent(build_store(make_embeddings()))
+print(agent.recommend("Puma Sneakers", "Footwear", cost_price=1800, target_margin=30, price_elasticity="High"))
+print(agent.sources())  # the documents behind the answer, numbered as in its citations
 ```
 
 ## Limitations of the prompt-only baseline
@@ -315,7 +445,14 @@ These limitations define the next stages.
 - **It relies on clean headers.** `markdown-contextual` works because the document has them. A messy PDF would need a different approach.
 - **Rank order is fragile.** The Enterprise failure was one rank away, and raising `k` is a blunt fix. Reranking, or using the `Plan` metadata to fetch every plan with a matching name, would be sturdier.
 - **No arithmetic.** The agent repeats whatever the document claims, so checking a saving needs a calculation tool.
-- **Not connected to stage 1.** The two stages run separately for now.
+- **Not connected to stage 1.** Stage 2 answers questions about a price list; stage 3 is where retrieval meets the recommender.
+
+## Limitations of the knowledge-base stage
+
+- **Rules live in the prompt.** The floor, rounding and elasticity rules are instructions, not checks, so a run can break them, as the luxury answer did. Structured output with the price as a number, validated in code, would catch that.
+- **Arithmetic is still the model's.** Small slips, such as a 30.8% margin for 30.7%, are easy to spot but shouldn't happen. A calculation tool would remove them.
+- **Citations are not verified.** An answer can cite the wrong record, or state a number no record contains; nothing checks this automatically yet.
+- **Small, hand-written data.** 31 past decisions across 7 categories, and six test products run once each, show the approach, not a validated pricing model.
 
 ## License
 

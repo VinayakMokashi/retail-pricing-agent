@@ -3,10 +3,15 @@ langchain-core>=1.0,<2
 langchain-groq>=1.0,<2
 python-dotenv
 
-# Stage 2: chunking, vector store, local embeddings and keyword search
-langchain-text-splitters>=1.0,<2
-langchain-experimental
+# Stages 2 and 3: vector store and local embeddings
 langchain-chroma>=1.0,<2
 langchain-huggingface>=1.0,<2
 sentence-transformers
+
+# Stage 2: chunking and keyword search
+langchain-text-splitters>=1.0,<2
+langchain-experimental
 rank-bm25
+
+# Stage 3 walkthrough notebook: tables
+pandas
