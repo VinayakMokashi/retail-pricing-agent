@@ -1,15 +1,16 @@
 # Retail Pricing Agent
 
-An LLM agent for pricing work, built with [LangChain](https://python.langchain.com/) and [Groq](https://groq.com/)-hosted `gpt-oss` models. It recommends a selling price for a retail product from five inputs — **cost price, current price, target margin, competitor price and price elasticity** — answers questions from a **price list** using retrieval, and backs its recommendations with evidence from a **pricing knowledge base**.
+An LLM agent for pricing work, built with [LangChain](https://python.langchain.com/) and [Groq](https://groq.com/)-hosted `gpt-oss` models. It recommends a selling price for a retail product from five inputs — **cost price, current price, target margin, competitor price and price elasticity** — answers questions from a **price list** using retrieval, backs its recommendations with evidence from a **pricing knowledge base**, and calls **pricing tools** for exact arithmetic, measured by an **evaluation framework**.
 
-The project is built in stages, each in its own folder, so every stage can be run and compared with the ones before it. Stage 1 is a **prompt-only baseline**: everything the agent knows and does comes from its prompts, with no tools and no data lookup. Stage 2 adds **retrieval**: a RAG agent that reads a price list, with chunking strategies scored on the same questions. Stage 3 brings the two together: the recommender retrieves past pricing decisions, benchmarks and guidelines from a **knowledge base** and cites them.
+The project is built in stages, each in its own folder, so every stage can be run and compared with the ones before it. Stage 1 is a **prompt-only baseline**: everything the agent knows and does comes from its prompts, with no tools and no data lookup. Stage 2 adds **retrieval**: a RAG agent that reads a price list, with chunking strategies scored on the same questions. Stage 3 brings the two together: the recommender retrieves past pricing decisions, benchmarks and guidelines from a **knowledge base** and cites them. Stage 4 gives the agent **calculation tools** and measures three prompt versions with an **evaluation framework**: an LLM judge validated against hand-labelled answers, a price check in code, tool-use metrics, and cost.
 
 | Stage | Folder | What it adds | Status |
 | --- | --- | --- | --- |
 | 1 | [`01_prompt_only/`](01_prompt_only/) | Prompt-only baseline: four prompting strategies compared on the same product | ✅ Done |
 | 2 | [`02_rag_chunking/`](02_rag_chunking/) | Retrieval: a RAG agent that answers from a price list, with chunking strategies scored on the same questions | ✅ Done |
 | 3 | [`03_pricing_knowledge_rag/`](03_pricing_knowledge_rag/) | Grounded recommendations: the recommender retrieves past decisions, benchmarks and guidelines from a knowledge base and cites them, compared with a prompt-only baseline | ✅ Done |
-| 4+ | — | Structured, validated output; tool calls for exact arithmetic; evaluation across many products | Planned |
+| 4 | [`04_tools_and_evaluation/`](04_tools_and_evaluation/) | Tools and evaluation: three pricing tools, three prompt versions, and a framework that scores answers, tool use and cost on 12 questions run 3 times each | ✅ Done |
+| 5+ | — | Structured, validated output; the tools and checks wired into the knowledge-base recommender | Planned |
 
 ## Repository structure
 
@@ -27,8 +28,10 @@ retail-pricing-agent/
 │   ├── new_category.json           # Sports & Fitness data, added in the new-category test
 │   ├── pricing_knowledge_rag.py    # documents, filtered retrieval, RAG agent, prompt-only baseline and CLI
 │   └── knowledge_rag_pricing.ipynb # walkthrough: retrieval design, comparisons and tests (with saved outputs)
+├── 04_tools_and_evaluation/
+│   └── pricing_agent_evaluation.ipynb  # tools, three agent versions, judge, metrics, charts, cost (with saved outputs)
 ├── requirements.txt
-├── .env.example                    # template for your Groq API key
+├── .env.example                    # template for your API key(s)
 └── LICENSE
 ```
 
@@ -210,6 +213,58 @@ From the run saved in the [walkthrough notebook](03_pricing_knowledge_rag/knowle
 - **New knowledge changes answers immediately.** Adding 8 documents moved the exercise bike from a cautious copy of the competitor's price to an evidence-based price just below it, with no retraining.
 - **A small embedding model misses obvious links.** The treadmill, the most relevant decision for an exercise bike, ranks only fourth of the five Sports & Fitness decisions, so the agent fetches 4 decisions, not 3.
 
+## Stage 4 — pricing tools and an evaluation framework
+
+Stages 1-3 left the arithmetic to the model and judged each stage on a handful of products. Stage 4 adds three **calculation tools** and an **evaluation framework**, and uses the framework to compare three versions of the agent that differ only in their system prompt.
+
+### The tools
+
+| Tool | What it computes |
+| --- | --- |
+| `margin_calculator(cost_price, target_margin)` | The price that gives a target margin on the selling price (accepts 25 or 0.25) |
+| `competitor_matching(our_cost, competitor_price, positioning)` | Match, undercut (5% below) or premium (10% above) a competitor, never below a 10% margin floor, with a warning when the floor applies |
+| `elasticity_adjustment(base_price, elasticity, price_change_percent)` | The effect of a price change on units sold and revenue (elastic −2, unit −1, inelastic −0.5), and whether to make it |
+
+Bad input returns an error message instead of raising, so the agent can read it and the evaluation can count it as a failed call.
+
+### The three agents
+
+The same model (`gpt-oss-120b`), tools and settings; only the system prompt differs:
+
+- **basic:** one line, "You are a pricing assistant. Answer the user's pricing question."
+- **structured:** a retail pricing analyst with three steps (find the numbers, use the tools, give one price with a short reason).
+- **comprehensive:** a senior strategist with the tool list, a four-step analysis, "never calculate prices yourself", and a fixed last line `Recommended price: $X.XX`.
+
+### How it is evaluated
+
+- **12 questions:** seven that need one tool, three that need several (one needs all three), and two edge cases: undercutting below cost, and a margin written as 0.35. Every expected price range was worked out by hand from the formulas. Every question runs **3 times per agent**: 108 runs in all.
+- **Answer quality:** an LLM judge gives pass/fail verdicts on accuracy (final price in range), completeness (every key factor addressed) and clarity (one unambiguous price). Plain code also extracts the recommended price and checks it against the range.
+- **The judge is tested before it is trusted:** on 7 hand-labelled answers, including deliberately wrong ones (markup instead of margin, falling for the elastic-demand trap), and then against the code check on every real answer.
+- **Tool use:** precision, recall, success rate, and too few / optimal / too many calls.
+- **Cost and speed:** real token counts, at illustrative rates, and time per question.
+
+### Results
+
+From the run saved in the [notebook](04_tools_and_evaluation/pricing_agent_evaluation.ipynb):
+
+| | basic | structured | comprehensive |
+| --- | --- | --- | --- |
+| Accuracy (judge) | 0.972 | 0.972 | 1.000 |
+| Completeness | 1.000 | 0.972 | 0.944 |
+| Clarity | 0.833 | 0.972 | 1.000 |
+| Tool precision / recall | 1.000 / 0.958 | 1.000 / 0.991 | 1.000 / 1.000 |
+| **Overall score** | **0.957** | **0.984** | **0.991** |
+| Cost per question (illustrative rates) | $0.0022 | $0.0023 | $0.0029 |
+
+### What the results showed
+
+- **The judge earned its place.** It matched all 21 hand labels (0 false passes) and the code's price check on 104 of 108 real answers. In all 4 disagreements the judge was right. The code had picked up the cost ($60 instead of $90.25), a rejected option ($55, $10.45), or an earlier $47.50 when the agent's final, wrong answer was $30.77. Text rules break easily on free-form answers.
+- **The prompt mattered most for clarity and multi-tool questions.** The basic agent sometimes gave two prices, and on the hardest question it skipped a tool and once recommended a price that loses revenue. The comprehensive agent gave the same price on every run of every question.
+- **Tool metrics can't see wrong numbers.** One structured run applied a 5% cut twice ($45.12 instead of $47.50). It called the right tools, so it scored 100% on tool use and failed only on accuracy.
+- **The detailed prompt costs more:** about 29% more per question than basic, mostly because its long system prompt nearly doubles the input tokens.
+
+The recommendation is the comprehensive prompt: the best score, the same price on every run, and a final line that code can read. Its scores are near the ceiling, though, and differences of one or two runs out of 36 are within noise.
+
 ## Tech stack
 
 - Python 3.10+
@@ -219,6 +274,7 @@ From the run saved in the [walkthrough notebook](03_pricing_knowledge_rag/knowle
 - Stages 2 and 3: `langchain-chroma` (vector store) and `langchain-huggingface` with `sentence-transformers` (local `all-MiniLM-L6-v2` embeddings)
 - Stage 2 only: `langchain-text-splitters` and `langchain-experimental` (chunking), `rank-bm25` (keyword search)
 - Stage 3 walkthrough notebook: `pandas` (tables)
+- Stage 4: `langchain-groq` or, with a Cerebras key, `langchain-openai` (Cerebras serves `gpt-oss-120b` through an OpenAI-compatible API); `pandas`, `numpy` and `matplotlib` for the tables and charts
 - Jupyter (optional, to run the walkthrough notebooks)
 
 ## Setup
@@ -259,8 +315,11 @@ From the run saved in the [walkthrough notebook](03_pricing_knowledge_rag/knowle
    GROQ_API_KEY=your_groq_api_key_here
    ```
 
-   Both stages load `.env` from the repository root, so the key is found no matter which
+   Every stage loads `.env` from the repository root, so the key is found no matter which
    directory you launch from. `.env` is git-ignored and never committed.
+
+   Stage 4 also accepts an optional `CEREBRAS_API_KEY`. When it is set, the stage 4 notebook runs on
+   Cerebras, which serves the same model with much higher rate limits.
 
 ## How to run
 
@@ -406,9 +465,10 @@ pip install jupyter
 jupyter notebook 01_prompt_only/prompt_only_pricing.ipynb
 jupyter notebook 02_rag_chunking/rag_chunking_comparison.ipynb
 jupyter notebook 03_pricing_knowledge_rag/knowledge_rag_pricing.ipynb
+jupyter notebook 04_tools_and_evaluation/pricing_agent_evaluation.ipynb
 ```
 
-All three notebooks are saved with their outputs, so you can read the full comparisons on GitHub without running them. Running them makes 12, 38 and 6 model calls.
+All four notebooks are saved with their outputs, so you can read the full comparisons on GitHub without running them. Running the first three makes 12, 38 and 6 model calls. The stage 4 evaluation makes 371 calls (about 300,000 tokens; roughly 3 minutes on Cerebras). On Groq's free tier, set `N_TRIALS = 1` in the notebook to stay within the daily token limit.
 
 ### From Python
 
@@ -453,6 +513,13 @@ These limitations define the next stages.
 - **Arithmetic is still the model's.** Small slips, such as a 30.8% margin for 30.7%, are easy to spot but shouldn't happen. A calculation tool would remove them.
 - **Citations are not verified.** An answer can cite the wrong record, or state a number no record contains; nothing checks this automatically yet.
 - **Small, hand-written data.** 31 past decisions across 7 categories, and six test products run once each, show the approach, not a validated pricing model.
+
+## Limitations of the evaluation stage
+
+- **Small and tidy.** 12 questions run 3 times each; a difference of one or two runs is within noise. The expected prices follow this stage's own tool rules (5% undercut, 10% premium, 10% floor, fixed elasticity coefficients), not market data.
+- **The judge is the same model as the agents.** That could favour its own style. The hand-labelled set and the code cross-check are what make its verdicts trustworthy here, and both are small.
+- **The tools are not yet in the recommender.** Stage 4 evaluates a tool-using agent on its own questions; wiring the tools and checks into the knowledge-base recommender is the next stage.
+- **Illustrative costs.** The token counts are real, but the rates and the per-tool-call fee are examples. The tools are local functions and cost nothing.
 
 ## License
 
