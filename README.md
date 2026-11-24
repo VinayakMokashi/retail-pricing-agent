@@ -1,8 +1,8 @@
 # Retail Pricing Agent
 
-An LLM agent for pricing work, built with [LangChain](https://python.langchain.com/), [LangGraph](https://langchain-ai.github.io/langgraph/) and [Groq](https://groq.com/)-hosted `gpt-oss` models. It recommends a selling price for a retail product from five inputs — **cost price, current price, target margin, competitor price and price elasticity** — answers questions from a **price list** using retrieval, backs its recommendations with evidence from a **pricing knowledge base**, calls **pricing tools** for exact arithmetic, measured by an **evaluation framework**, and **checks its own retrieval and answers** before replying.
+An LLM agent for pricing work, built with [LangChain](https://python.langchain.com/), [LangGraph](https://langchain-ai.github.io/langgraph/) and [Groq](https://groq.com/)-hosted `gpt-oss` models. It recommends a selling price for a retail product from five inputs — **cost price, current price, target margin, competitor price and price elasticity** — answers questions from a **price list** using retrieval, backs its recommendations with evidence from a **pricing knowledge base**, calls **pricing tools** for exact arithmetic, measured by an **evaluation framework**, **checks its own retrieval and answers** before replying, and finally **leaves every number and pricing rule to code**, so the model only chooses a price and explains it.
 
-The project is built in stages, each in its own folder, so every stage can be run and compared with the ones before it. Stage 1 is a **prompt-only baseline**: everything the agent knows and does comes from its prompts, with no tools and no data lookup. Stage 2 adds **retrieval**: a RAG agent that reads a price list, with chunking strategies scored on the same questions. Stage 3 brings the two together: the recommender retrieves past pricing decisions, benchmarks and guidelines from a **knowledge base** and cites them. Stage 4 gives the agent **calculation tools** and measures three prompt versions with an **evaluation framework**: an LLM judge validated against hand-labelled answers, a price check in code, tool-use metrics, and cost. Stage 5 makes the agent **check its own work**: a LangGraph state machine grades every retrieved document, checks that the answer's numbers are grounded and that it answers the question, and rewrites the question or the answer when a check fails (Self-RAG).
+The project is built in stages, each in its own folder, so every stage can be run and compared with the ones before it. Stage 1 is a **prompt-only baseline**: everything the agent knows and does comes from its prompts, with no tools and no data lookup. Stage 2 adds **retrieval**: a RAG agent that reads a price list, with chunking strategies scored on the same questions. Stage 3 brings the two together: the recommender retrieves past pricing decisions, benchmarks and guidelines from a **knowledge base** and cites them. Stage 4 gives the agent **calculation tools** and measures three prompt versions with an **evaluation framework**: an LLM judge validated against hand-labelled answers, a price check in code, tool-use metrics, and cost. Stage 5 makes the agent **check its own work**: a LangGraph state machine grades every retrieved document, checks that the answer's numbers are grounded and that it answers the question, and rewrites the question or the answer when a check fails (Self-RAG). Stage 6 brings stages 3-5 together: code calculates the prices the knowledge base's rules allow, the **model chooses** one as **structured output**, code checks every hard rule, a model checks the explanation, and every answer is **scored as it is produced**.
 
 | Stage | Folder | What it adds | Status |
 | --- | --- | --- | --- |
@@ -11,7 +11,8 @@ The project is built in stages, each in its own folder, so every stage can be ru
 | 3 | [`03_pricing_knowledge_rag/`](03_pricing_knowledge_rag/) | Grounded recommendations: the recommender retrieves past decisions, benchmarks and guidelines from a knowledge base and cites them, compared with a prompt-only baseline | ✅ Done |
 | 4 | [`04_tools_and_evaluation/`](04_tools_and_evaluation/) | Tools and evaluation: three pricing tools, three prompt versions, and a framework that scores answers, tool use and cost on 12 questions run 3 times each | ✅ Done |
 | 5 | [`05_self_correcting_rag/`](05_self_correcting_rag/) | Self-correction: a LangGraph agent that grades its retrieval, checks its answers for unsupported numbers and usefulness, rewrites the question or the answer when a check fails, and is compared with plain RAG on cost and quality | ✅ Done |
-| 6+ | — | Structured, validated output; the tools and checks wired into the knowledge-base recommender | Planned |
+| 6 | [`06_validated_pricing_agent/`](06_validated_pricing_agent/) | Validation: stage 3's knowledge base, stage 4's calculations and stage 5's loop in one agent; the model chooses a price from a list the code calculates, as structured output, code enforces every pricing rule, and every answer is scored live | ✅ Done |
+| 7+ | — | Real sales data: elasticity measured per product rather than per category, and price changes checked against what happened | Planned |
 
 ## Repository structure
 
@@ -33,6 +34,9 @@ retail-pricing-agent/
 │   └── pricing_agent_evaluation.ipynb  # tools, three agent versions, judge, metrics, charts, cost (with saved outputs)
 ├── 05_self_correcting_rag/
 │   └── self_correcting_pricing_agent.ipynb  # graders, query rewriter, LangGraph loop, retry limit, comparison with plain RAG (with saved outputs)
+├── 06_validated_pricing_agent/
+│   ├── validated_pricing_agent.py      # calculations, structured decision, rule checks, LangGraph loop, live scoring and CLI
+│   └── validated_pricing_agent.ipynb   # walkthrough: test set, failure tests, comparison with stage 3, live evaluation (with saved outputs)
 ├── requirements.txt
 ├── .env.example                    # template for your API key(s)
 └── LICENSE
@@ -325,6 +329,83 @@ Against a plain RAG pipeline (same retriever, prompt and model, no checks), over
 - **A plain "regenerate" can spin.** It resends the same prompt, and at temperature 0 the model writes almost the same answer; an earlier run rejected its grocery answer 8 times in a row (31 calls). The retry limit, and feedback on what was rejected, end that.
 - **The cost is about 7-9× the calls and tokens of plain RAG.** That is worth it for a merchant-facing price, but not for low-stakes text.
 
+## Stage 6 — a validated agent: the model chooses, the code calculates and checks
+
+Each earlier stage left one problem open. Stage 3 grounded its prices in a knowledge base but left the arithmetic and the rules to the model, and one answer priced a luxury handbag below the competitor while citing the guideline against it. Stage 4's tools made the arithmetic exact, but they were never connected to the knowledge base, and their rules (a fixed 5% undercut, a 10% premium) were not the knowledge base's own. Stage 5 checked its answers in a loop, but every check was an LLM's judgement. Stage 6 combines them under one principle: **the model chooses, the code calculates and checks.**
+
+### How the agent works
+
+```
+product details (fields, or a message parsed into fields and checked by code)
+   │
+retrieve ── stage 3's filtered searches (imported from stage 3), plus the two guidelines the code enforces
+   │
+grade evidence ── a model checks only what similarity picked (past decisions, general guidelines)
+   │
+calculate (code) ── margin floor · the band the elasticity guideline allows · the allowed price points
+   │
+decide (model) ── structured output: one price from the allowed list, with cited reasons
+   │
+check rules (code) ──── fail ──► decide again, told why (3 attempts; then the rule-based price)
+   │ pass
+check the explanation against the evidence (model) ── fail ──► decide again (3 attempts; then LOW CONFIDENCE)
+   │ pass
+answer ── every number written by code ──► live scores: code checks + an LLM judge, logged as JSONL
+```
+
+**The knowledge base's guidelines become code.** Stage 3's answers cited these rules; stage 6 enforces them:
+
+| Guideline in the knowledge base | Rule in code |
+| --- | --- |
+| Never price below the margin floor | `price ≥ cost / (1 − target margin)` (stage 4's `margin_calculator`) |
+| High elasticity: stay within 3% of the main competitor | band: competitor ± 3% |
+| Medium elasticity: price within 5% of the competitor | band: competitor ± 5% |
+| Low elasticity: price at or up to 10% above the competitor | band: competitor to competitor + 10% |
+| Categories with no history: stay within 5% of the competitor | band: competitor ± 5% |
+| Psychological price points: end in 49 or 99; round prices for luxury | allowed prices end in 49 or 99; luxury prices are multiples of ₹500 (₹100 below ₹10,000) |
+| If the market price is below the floor, keep the floor price and compete on value, or escalate | the only allowed price is the first price point above the floor, and the answer must state the trade-off |
+
+- **The elasticity** comes from the merchant or, if not given, from the category's benchmark (metadata, not the model). A category with no data gets the no-history band.
+- **Structured output in, structured output out.** The request is a validated `PricingRequest`; a merchant's message can be turned into one by `parse_request()`, which then checks in code that every number it extracted appears in the message (a guessed number is dropped, and the agent asks for what is missing). The decision is a `PricingDecision`: a price, the evidence used (document numbers), a rationale, a trade-off and a risk. The model never writes a margin: the answer's numbers are rendered by code.
+- **Fail closed.** If the model's price still breaks a rule after 3 attempts, the agent answers with the rule-based price (the lowest allowed one) and says so; it never returns a price that breaks a rule. If the explanation is still not supported after 3 attempts, the price stands but the answer carries a LOW CONFIDENCE warning.
+- **Live evaluation.** Every answer is scored as it is produced: the code checks are re-run on the final answer (floor, band, price point, the margin in the text, valid citations), and stage 4's LLM judge, adapted, rates what code can't: does the price follow the evidence, is the explanation complete and clear. The judge is a monitor, not a gate. With `log_path` (or `--log`), each answer, its path, the reasons it was sent back and its scores are appended to a JSONL file.
+
+### Results
+
+From the run saved in the [notebook](06_validated_pricing_agent/validated_pricing_agent.ipynb): seven products in ₹, each priced twice.
+
+| Product | What it tests | Price | Margin | Against the competitor |
+| --- | --- | --- | --- | --- |
+| Puma sneakers: cost ₹1,800, 30% target, competitor ₹2,699 | High elasticity; only three allowed prices | ₹2,649 (both runs) | 32.0% | 1.9% below |
+| Headphones: cost ₹22,000, 18%, competitor ₹26,990, current price ₹27,990 | A floor just under the competitor | ₹26,899 (both) | 18.2% | 0.3% below; units sold +5.8% to +9.7% against the current price |
+| Coach handbag: cost ₹16,000, 55%, competitor ₹38,500 | Low elasticity, round luxury prices | ₹39,000 (both) | 59.0% | 1.3% above |
+| JBL speaker: cost ₹2,400, 25%, competitor ₹2,999 | A competitor below the margin floor | ₹3,249 (both), the only allowed price, with the trade-off stated | 26.1% | 8.3% above |
+| Pressure cooker: cost ₹1,500, 38%, no competitor price | No band | ₹2,499 / ₹2,449 | 40.0% / 38.8% | — |
+| Exercise bike: cost ₹9,800, 30%, competitor ₹14,499 | A category with no data | ₹14,049 (both), the first price point above the floor | 30.2% | 3.1% below |
+| The same bike, with the Sports & Fitness data | New knowledge | ₹14,499 / ₹14,049 | 32.4% / 30.2% | at / 3.1% below |
+
+| Live evaluation of the 14 answers | |
+| --- | --- |
+| Code checks passed (floor, band, price point, margin in the answer, citations) | 100% |
+| Judge: follows the evidence / complete / clear | 86% / 100% / 100% |
+| Answered on the first attempt | 12 of 14; 2 sent back by the grounding check |
+| Rule-based fallbacks / LOW CONFIDENCE answers | 0 / 0 |
+| Per answer | 6.3 model calls, about 7,000 tokens and 2.6 s, plus 1 judge call |
+
+Stage 3's agent priced the same products (its own prompt and settings, the same model), and the same code checks were applied to its answers:
+
+| | Stage 3 | Stage 6 |
+| --- | --- | --- |
+| Products with a pricing rule broken | **4 of 7** | **0 of 7** |
+| What broke | Sneakers at ₹2,599, 3.7% below the competitor where the High elasticity guideline allows 3%, stated as a 30.8% margin that is 30.74%; ₹3,200 and ₹2,420, which are not price points; the bike at ₹14,899, stated as a 32.4% margin that is 34.22% | — |
+
+### What the results showed
+
+- **Choosing from a list leaves little room to break a rule.** The rule checks never had to send a decision back in the saved run. The fallback was exercised by a stand-in decider that always answers stage 3's below-competitor handbag price: after 3 rejections the agent answered ₹38,500, the lowest allowed price, labelled RULE-BASED PRICE.
+- **The grounding check caught the model's own arithmetic.** Told not to calculate, the model still wrote that ₹2,649 is "2.5% below" the competitor (it is 1.9%), every time it priced the sneakers. The check sent it back, and the second attempt left the number out.
+- **The judge found a data problem, not a model problem.** With the Sports & Fitness data, the band comes from the category benchmark's label (Medium, ±5%), but the same benchmark's notes say big-ticket equipment behaves like High elasticity (±3%). One run priced the bike 3.1% below the competitor: allowed by the code, outside the High guideline. The judge failed "follows the evidence" on both runs.
+- **Stage 3's prices were mostly sensible,** but each rule held only when the model remembered it, and the arithmetic was right only when the model got it right. In stage 6, code does both.
+
 ## Tech stack
 
 - Python 3.10+
@@ -336,6 +417,7 @@ Against a plain RAG pipeline (same retriever, prompt and model, no checks), over
 - Stage 3 walkthrough notebook: `pandas` (tables)
 - Stage 4: `langchain-groq` or, with a Cerebras key, `langchain-openai` (Cerebras serves `gpt-oss-120b` through an OpenAI-compatible API); `pandas`, `numpy` and `matplotlib` for the tables and charts
 - Stage 5: `langgraph` (the state machine), with the same vector store and embeddings as stages 2 and 3 and the same Cerebras/Groq switch as stage 4
+- Stage 6: the same stack as stage 5, with `pydantic` models (installed with LangChain) for the request and the decision; it imports stage 3's module for the knowledge base and its retrieval
 - Jupyter (optional, to run the walkthrough notebooks)
 
 ## Setup
@@ -379,8 +461,8 @@ Against a plain RAG pipeline (same retriever, prompt and model, no checks), over
    Every stage loads `.env` from the repository root, so the key is found no matter which
    directory you launch from. `.env` is git-ignored and never committed.
 
-   Stages 4 and 5 also accept an optional `CEREBRAS_API_KEY`. When it is set, those notebooks run on
-   Cerebras, which serves the same model with much higher rate limits.
+   Stages 4-6 also accept an optional `CEREBRAS_API_KEY`. When it is set, they run on Cerebras,
+   which serves the same model with much higher rate limits. Stage 6 needs only one of the two keys.
 
 ## How to run
 
@@ -519,6 +601,58 @@ Target margin = 30 % → Minimum price = Cost ÷ (1 – target) = 1,800 ÷ 0.70 
 Set the selling price at **₹2,599**.
 ```
 
+### Stage 6 command line
+
+```bash
+# Price the reference product (Puma sneakers: cost ₹1,800, 30% target margin, competitor ₹2,699)
+python 06_validated_pricing_agent/validated_pricing_agent.py
+
+# Price your own product; --quiet prints only the answer and its scores
+python 06_validated_pricing_agent/validated_pricing_agent.py --product "Coach Leather Handbag" --category "Luxury Goods" --cost 16000 --margin 55 --competitor 38500 --quiet
+
+# Describe it in plain words; the agent asks for anything required that is missing
+python 06_validated_pricing_agent/validated_pricing_agent.py --text "Puma sneakers, they cost me ₹1,800. Competitor sells at ₹2,699, I need a 30% margin."
+
+# Only the calculations: floor, band and allowed prices (no API key needed)
+python 06_validated_pricing_agent/validated_pricing_agent.py --tools-only --product "JBL Bluetooth Speaker" --category Electronics --cost 2400 --margin 25 --competitor 2999
+
+# Append each answer, the reasons it was sent back and its scores to a JSONL log
+python 06_validated_pricing_agent/validated_pricing_agent.py --log pricing_log.jsonl
+```
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `--product` | Puma Sneakers | Product name |
+| `--category` | Footwear | Category; one with no data in the knowledge base gets the no-history guideline |
+| `--cost` | 1800 | Cost price in ₹ |
+| `--margin` | 30 | Target gross margin in percent, on selling price (30 or 0.30) |
+| `--competitor` | 2699 | Competitor price in ₹ |
+| `--current` | none | Current selling price in ₹; adds the expected change in units sold |
+| `--elasticity` | from the category benchmark | `low`, `medium` or `high` |
+| `--text` | none | Describe the product in plain words instead of the options above |
+| `--add-new-category` | Off | Add the Sports & Fitness data first |
+| `--no-judge` | Off | Skip the LLM judge's scores (one model call fewer) |
+| `--log` | none | Append the answer and its scores to this JSONL file |
+| `--quiet` | Off | Print only the answer and its scores, not each step |
+| `--tools-only` | Off | Print the calculations without calling a model |
+
+Sample output for the reference product (`--quiet`):
+
+```
+Recommended price: ₹2,649
+- Margin: 32.0% (target 30%, floor ₹2,571.43)
+- Competitor: ₹2,699; this price is 1.9% below it
+- Allowed: ₹2,618.03 to ₹2,779.97, within 3% of the competitor (High elasticity guideline)
+Why: ₹2,649 falls inside the allowed band and is priced just below the competitor, satisfying the high‑elasticity rule to stay within 3% of the main competitor while keeping the margin floor intact. The choice mirrors a prior successful Puma decision that priced modestly below the rival and follows the psychological‑price‑point guideline for value perception.
+Risks: Monitor competitor price moves and sales velocity to avoid a price war or inventory buildup.
+Sources: [4] decision:Puma Smash Sneakers, [8] guideline:High elasticity: small price changes, [9] guideline:Psychological price points
+
+Code checks: above_floor ok, in_band ok, price_point ok, margin_in_answer_correct ok, citations_valid ok
+Judge: follows_evidence pass, complete pass, clear pass
+Sent back once (grounding: "₹2,649 is 2.5% below the main competitor’s price")
+Path: retrieve -> grade_evidence -> calculate -> decide -> check_rules -> check_grounding -> decide -> check_rules -> check_grounding -> finalize | 9 model calls (+1 judge), 13,757 tokens, 4.3 s
+```
+
 ### Walkthrough notebooks
 
 ```bash
@@ -528,9 +662,10 @@ jupyter notebook 02_rag_chunking/rag_chunking_comparison.ipynb
 jupyter notebook 03_pricing_knowledge_rag/knowledge_rag_pricing.ipynb
 jupyter notebook 04_tools_and_evaluation/pricing_agent_evaluation.ipynb
 jupyter notebook 05_self_correcting_rag/self_correcting_pricing_agent.ipynb
+jupyter notebook 06_validated_pricing_agent/validated_pricing_agent.ipynb
 ```
 
-All five notebooks are saved with their outputs, so you can read the full comparisons on GitHub without running them. Running the first three makes 12, 38 and 6 model calls. The stage 4 evaluation makes 371 calls (about 300,000 tokens; roughly 3 minutes on Cerebras). On Groq's free tier, set `N_TRIALS = 1` in the notebook to stay within the daily token limit. The stage 5 notebook made 213 calls in its saved run (about 200,000 tokens; under 3 minutes on Cerebras); the count varies with how often the agent loops. On Groq's free tier, set `N_RUNS = 1` in its last section.
+All six notebooks are saved with their outputs, so you can read the full comparisons on GitHub without running them. Running the first three makes 12, 38 and 6 model calls. The stage 4 evaluation makes 371 calls (about 300,000 tokens; roughly 3 minutes on Cerebras). On Groq's free tier, set `N_TRIALS = 1` in the notebook to stay within the daily token limit. The stage 5 notebook made 213 calls in its saved run (about 200,000 tokens; under 3 minutes on Cerebras); the count varies with how often the agent loops. On Groq's free tier, set `N_RUNS = 1` in its last section. The stage 6 notebook made 128 calls in its saved run (about 155,000 tokens; under 2 minutes on Cerebras); on Groq's free tier, set `N_RUNS = 1` in its section 3.
 
 ### From Python
 
@@ -552,6 +687,18 @@ print(agent.recommend("Puma Sneakers", "Footwear", cost_price=1800, target_margi
 print(agent.sources())  # the documents behind the answer, numbered as in its citations
 ```
 
+```python
+# run from inside 06_validated_pricing_agent/
+from validated_pricing_agent import KnowledgeBase, ValidatedPricingAgent
+
+agent = ValidatedPricingAgent(KnowledgeBase(), verbose=False)
+result = agent.price({"product_name": "Puma Sneakers", "category": "Footwear", "cost_price": 1800,
+                      "target_margin": 30, "competitor_price": 2699})
+print(result.answer)        # the merchant-facing answer; every number in it is calculated by code
+print(result.code_checks)   # the rule checks, re-run on the final answer
+print(result.judge)         # the LLM judge's scores
+```
+
 ## Limitations of the prompt-only baseline
 
 - **No verification.** The margin floor and the one-price rule are enforced only by the prompt; nothing checks the model's arithmetic or its final price.
@@ -571,7 +718,7 @@ These limitations define the next stages.
 
 ## Limitations of the knowledge-base stage
 
-- **Rules live in the prompt.** The floor, rounding and elasticity rules are instructions, not checks, so a run can break them, as the luxury answer did. Structured output with the price as a number, validated in code, would catch that.
+- **Rules live in the prompt.** The floor, rounding and elasticity rules are instructions, not checks, so a run can break them, as the luxury answer did. Structured output with the price as a number, validated in code, would catch that (stage 6 does).
 - **Arithmetic is still the model's.** Small slips, such as a 30.8% margin for 30.7%, are easy to spot but shouldn't happen. A calculation tool would remove them.
 - **Citations are not verified.** An answer can cite the wrong record, or state a number no record contains; nothing checks this automatically yet.
 - **Small, hand-written data.** 31 past decisions across 7 categories, and six test products run once each, show the approach, not a validated pricing model.
@@ -580,7 +727,7 @@ These limitations define the next stages.
 
 - **Small and tidy.** 12 questions run 3 times each; a difference of one or two runs is within noise. The expected prices follow this stage's own tool rules (5% undercut, 10% premium, 10% floor, fixed elasticity coefficients), not market data.
 - **The judge is the same model as the agents.** That could favour its own style. The hand-labelled set and the code cross-check are what make its verdicts trustworthy here, and both are small.
-- **The tools are not yet in the recommender.** Stage 4 evaluates a tool-using agent on its own questions; wiring the tools and checks into the knowledge-base recommender is a later stage.
+- **The tools are not yet in the recommender.** Stage 4 evaluates a tool-using agent on its own questions; stage 6 wires the same calculations into the knowledge-base recommender.
 - **Illustrative costs.** The token counts are real, but the rates and the per-tool-call fee are examples. The tools are local functions and cost nothing.
 
 ## Limitations of the self-correcting stage
@@ -588,7 +735,14 @@ These limitations define the next stages.
 - **The checks are LLM judgements.** They disagree with themselves on identical text, passed a number borrowed from a guideline's example, and once rejected a cautious answer while passing a bolder one. They are a safety net, not proof.
 - **No exact arithmetic.** The graders don't catch small slips, such as $2,570 sold as a 30% margin when it gives 29.96%. Stage 4's tools and a code check of the price would.
 - **The prompt does much of the work.** With a strict generator prompt, plain RAG already admitted the grocery gap; the clearest gain from the loop came from rejecting off-topic documents.
-- **Small and separate.** Twenty hand-written entries and four test questions, with a knowledge base separate from stage 3's. Wiring these checks into the stage 3 recommender, with structured output and the stage 4 tools, is the next stage.
+- **Small and separate.** Twenty hand-written entries and four test questions, with a knowledge base separate from stage 3's. Stage 6 wires these checks into the stage 3 recommender, with structured output and the stage 4 calculations.
+
+## Limitations of the validated stage
+
+- **The rules are only as good as their encoding.** The bands are this repository's reading of the guidelines (for example, Low elasticity as "at the competitor to 10% above"), and elasticity is set per category, while the bike case shows that part of a category can behave differently. Benchmarks per sub-category, or the merchant's own elasticity, would fix that case.
+- **The model still calculates when told not to.** The grounding check catches it, at the cost of a retry. Listing each allowed price's margin and gap to the competitor in the prompt would remove the reason to calculate.
+- **The model checks are still model checks.** The relevance grades, the grounding check and the judge are LLM judgements, now limited to what code can't decide. This stage did not re-validate the judge against hand-labelled answers, as stage 4 did.
+- **Small and hand-written.** Seven products, each priced twice, on the stage 3 knowledge base; enough to show the design, not to measure it.
 
 ## License
 
