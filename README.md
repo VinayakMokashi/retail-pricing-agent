@@ -1,8 +1,8 @@
 # Retail Pricing Agent
 
-An LLM agent for pricing work, built with [LangChain](https://python.langchain.com/) and [Groq](https://groq.com/)-hosted `gpt-oss` models. It recommends a selling price for a retail product from five inputs — **cost price, current price, target margin, competitor price and price elasticity** — answers questions from a **price list** using retrieval, backs its recommendations with evidence from a **pricing knowledge base**, and calls **pricing tools** for exact arithmetic, measured by an **evaluation framework**.
+An LLM agent for pricing work, built with [LangChain](https://python.langchain.com/), [LangGraph](https://langchain-ai.github.io/langgraph/) and [Groq](https://groq.com/)-hosted `gpt-oss` models. It recommends a selling price for a retail product from five inputs — **cost price, current price, target margin, competitor price and price elasticity** — answers questions from a **price list** using retrieval, backs its recommendations with evidence from a **pricing knowledge base**, calls **pricing tools** for exact arithmetic, measured by an **evaluation framework**, and **checks its own retrieval and answers** before replying.
 
-The project is built in stages, each in its own folder, so every stage can be run and compared with the ones before it. Stage 1 is a **prompt-only baseline**: everything the agent knows and does comes from its prompts, with no tools and no data lookup. Stage 2 adds **retrieval**: a RAG agent that reads a price list, with chunking strategies scored on the same questions. Stage 3 brings the two together: the recommender retrieves past pricing decisions, benchmarks and guidelines from a **knowledge base** and cites them. Stage 4 gives the agent **calculation tools** and measures three prompt versions with an **evaluation framework**: an LLM judge validated against hand-labelled answers, a price check in code, tool-use metrics, and cost.
+The project is built in stages, each in its own folder, so every stage can be run and compared with the ones before it. Stage 1 is a **prompt-only baseline**: everything the agent knows and does comes from its prompts, with no tools and no data lookup. Stage 2 adds **retrieval**: a RAG agent that reads a price list, with chunking strategies scored on the same questions. Stage 3 brings the two together: the recommender retrieves past pricing decisions, benchmarks and guidelines from a **knowledge base** and cites them. Stage 4 gives the agent **calculation tools** and measures three prompt versions with an **evaluation framework**: an LLM judge validated against hand-labelled answers, a price check in code, tool-use metrics, and cost. Stage 5 makes the agent **check its own work**: a LangGraph state machine grades every retrieved document, checks that the answer's numbers are grounded and that it answers the question, and rewrites the question or the answer when a check fails (Self-RAG).
 
 | Stage | Folder | What it adds | Status |
 | --- | --- | --- | --- |
@@ -10,7 +10,8 @@ The project is built in stages, each in its own folder, so every stage can be ru
 | 2 | [`02_rag_chunking/`](02_rag_chunking/) | Retrieval: a RAG agent that answers from a price list, with chunking strategies scored on the same questions | ✅ Done |
 | 3 | [`03_pricing_knowledge_rag/`](03_pricing_knowledge_rag/) | Grounded recommendations: the recommender retrieves past decisions, benchmarks and guidelines from a knowledge base and cites them, compared with a prompt-only baseline | ✅ Done |
 | 4 | [`04_tools_and_evaluation/`](04_tools_and_evaluation/) | Tools and evaluation: three pricing tools, three prompt versions, and a framework that scores answers, tool use and cost on 12 questions run 3 times each | ✅ Done |
-| 5+ | — | Structured, validated output; the tools and checks wired into the knowledge-base recommender | Planned |
+| 5 | [`05_self_correcting_rag/`](05_self_correcting_rag/) | Self-correction: a LangGraph agent that grades its retrieval, checks its answers for unsupported numbers and usefulness, rewrites the question or the answer when a check fails, and is compared with plain RAG on cost and quality | ✅ Done |
+| 6+ | — | Structured, validated output; the tools and checks wired into the knowledge-base recommender | Planned |
 
 ## Repository structure
 
@@ -30,6 +31,8 @@ retail-pricing-agent/
 │   └── knowledge_rag_pricing.ipynb # walkthrough: retrieval design, comparisons and tests (with saved outputs)
 ├── 04_tools_and_evaluation/
 │   └── pricing_agent_evaluation.ipynb  # tools, three agent versions, judge, metrics, charts, cost (with saved outputs)
+├── 05_self_correcting_rag/
+│   └── self_correcting_pricing_agent.ipynb  # graders, query rewriter, LangGraph loop, retry limit, comparison with plain RAG (with saved outputs)
 ├── requirements.txt
 ├── .env.example                    # template for your API key(s)
 └── LICENSE
@@ -265,6 +268,63 @@ From the run saved in the [notebook](04_tools_and_evaluation/pricing_agent_evalu
 
 The recommendation is the comprehensive prompt: the best score, the same price on every run, and a final line that code can read. Its scores are near the ceiling, though, and differences of one or two runs out of 36 are within noise.
 
+## Stage 5 — a self-correcting agent (Self-RAG)
+
+Stage 3 trusts whatever the retriever returns and never checks its own answer. Stage 5 turns retrieval and generation into a [LangGraph](https://langchain-ai.github.io/langgraph/) state machine that grades its own work and loops back when a check fails, following the [Self-RAG](https://arxiv.org/abs/2310.11511) pattern and LangGraph's [Self-RAG example](https://github.com/langchain-ai/langgraph/blob/main/examples/rag/langgraph_self_rag.ipynb). The goal is to catch an unsupported number before it reaches the merchant.
+
+### The knowledge base
+
+Twenty short entries written for this stage (fictional, in $): elasticity benchmarks, historical margins, past pricing decisions and general guidelines for Electronics, Footwear, Apparel and Luxury goods. Grocery and SaaS pricing are deliberately missing, to test whether the agent admits a gap instead of borrowing another category's numbers. Each entry is one document (no chunking), embedded locally with `all-MiniLM-L6-v2` in Chroma.
+
+### How the agent works
+
+```
+START → retrieve (top 4) → grade_documents ─┬─ none relevant ─► transform_query ─► retrieve
+                                             └─ some relevant ─► generate ─► check the answer
+                                                                   ├─ numbers not grounded ─► generate again
+                                                                   ├─ grounded, not useful ─► transform_query
+                                                                   └─ grounded and useful  ─► END
+```
+
+| Step | What it does |
+| --- | --- |
+| Relevance grader | One small yes/no call per retrieved document; off-topic documents are dropped before the answer is written |
+| Generator | Uses only the retrieved context, gives one price with its margin and cites its evidence; with no data for the product's category it says so instead of recommending a margin |
+| Groundedness grader | Is every number in the answer traceable to the documents? The merchant's question is passed only as the source of their own figures (cost, competitor price, target margin) |
+| Usefulness grader | Does the answer give a price, or say clearly what data is missing? |
+| Query rewriter | Rewrites vague questions ("my sneakers aren't selling…") in the knowledge base's vocabulary, keeping the merchant's numbers |
+| Retry limit | One counter for rewrites and answers; after 3 attempts a failed check stops the run and the answer carries a LOW CONFIDENCE warning. A rewrite after a failed groundedness check is shown the rejected answer |
+
+Every grader accepts only a clear yes or no and retries the call otherwise, and every run also passes LangGraph's `recursion_limit` as a backstop.
+
+### Results
+
+From the run saved in the [notebook](05_self_correcting_rag/self_correcting_pricing_agent.ipynb):
+
+| Scenario | Path | Answer |
+| --- | --- | --- |
+| A: Puma sneakers, cost $1,800, competitor $2,799, 30% target | retrieve → grade → generate (7 calls) | $2,570, about 30%, 8% below the competitor, citing the Puma decision |
+| B: "my sneakers aren't selling, should I drop the price?" | Two Apparel documents dropped; no rewrite needed (7 calls) | Names the missing numbers and gives the footwear rule: match for medium elasticity, about 7% below for high |
+| C: organic grocery produce, cost $3 (not covered) | One answer rejected as not grounded, then rewritten (9 calls) | "The knowledge base does not contain data for this category", plus the margin floor rule with the guideline's 25% as an example |
+| D: a phone case costing $4 | All four documents rejected → question rewritten as an Electronics accessory → retrieved again (12 calls) | Applies the Electronics benchmark: price at or just below the leading competitor |
+
+Against a plain RAG pipeline (same retriever, prompt and model, no checks), over 12 runs each:
+
+| | Plain RAG | Self-RAG |
+| --- | --- | --- |
+| LLM calls per question | 1 | 9.3 |
+| Tokens per question | 1.1k | 7.7k |
+| Time per question | 0.7 s | 5.2 s |
+| Answers the groundedness grader judged hallucinated | 4/12 | 1/12 |
+
+### What the results showed
+
+- **The clearest win was a failed retrieval.** For the phone case, plain RAG got smartphone, headphone, Luxury and Footwear entries, then invented "30-40% for high-elasticity items" or borrowed the smartphone's 11% margin to suggest $4.49 for a $4 case. Self-RAG rejected those documents, rewrote the question and answered from the Electronics benchmark in all 3 runs.
+- **LLM graders are noisy on subtle cases.** An earlier version of the agent answered the grocery question with "$4.00, a 25% margin", taking the 25% from a guideline's worked example, and every grader passed it. Even with that mistake spelled out in its prompt, the groundedness grader still passed it 3 times out of 3 in the saved run. Identical answers got different verdicts, so the 4/12 vs 1/12 above is indicative at best (and circular for Self-RAG, whose answers had already passed the same grader).
+- **The fix that held was in the generator:** check for data on the product's own category before giving any number, at medium reasoning effort. At low effort the model skipped the check.
+- **A plain "regenerate" can spin.** It resends the same prompt, and at temperature 0 the model writes almost the same answer; an earlier run rejected its grocery answer 8 times in a row (31 calls). The retry limit, and feedback on what was rejected, end that.
+- **The cost is about 7-9× the calls and tokens of plain RAG.** That is worth it for a merchant-facing price, but not for low-stakes text.
+
 ## Tech stack
 
 - Python 3.10+
@@ -275,6 +335,7 @@ The recommendation is the comprehensive prompt: the best score, the same price o
 - Stage 2 only: `langchain-text-splitters` and `langchain-experimental` (chunking), `rank-bm25` (keyword search)
 - Stage 3 walkthrough notebook: `pandas` (tables)
 - Stage 4: `langchain-groq` or, with a Cerebras key, `langchain-openai` (Cerebras serves `gpt-oss-120b` through an OpenAI-compatible API); `pandas`, `numpy` and `matplotlib` for the tables and charts
+- Stage 5: `langgraph` (the state machine), with the same vector store and embeddings as stages 2 and 3 and the same Cerebras/Groq switch as stage 4
 - Jupyter (optional, to run the walkthrough notebooks)
 
 ## Setup
@@ -318,7 +379,7 @@ The recommendation is the comprehensive prompt: the best score, the same price o
    Every stage loads `.env` from the repository root, so the key is found no matter which
    directory you launch from. `.env` is git-ignored and never committed.
 
-   Stage 4 also accepts an optional `CEREBRAS_API_KEY`. When it is set, the stage 4 notebook runs on
+   Stages 4 and 5 also accept an optional `CEREBRAS_API_KEY`. When it is set, those notebooks run on
    Cerebras, which serves the same model with much higher rate limits.
 
 ## How to run
@@ -466,9 +527,10 @@ jupyter notebook 01_prompt_only/prompt_only_pricing.ipynb
 jupyter notebook 02_rag_chunking/rag_chunking_comparison.ipynb
 jupyter notebook 03_pricing_knowledge_rag/knowledge_rag_pricing.ipynb
 jupyter notebook 04_tools_and_evaluation/pricing_agent_evaluation.ipynb
+jupyter notebook 05_self_correcting_rag/self_correcting_pricing_agent.ipynb
 ```
 
-All four notebooks are saved with their outputs, so you can read the full comparisons on GitHub without running them. Running the first three makes 12, 38 and 6 model calls. The stage 4 evaluation makes 371 calls (about 300,000 tokens; roughly 3 minutes on Cerebras). On Groq's free tier, set `N_TRIALS = 1` in the notebook to stay within the daily token limit.
+All five notebooks are saved with their outputs, so you can read the full comparisons on GitHub without running them. Running the first three makes 12, 38 and 6 model calls. The stage 4 evaluation makes 371 calls (about 300,000 tokens; roughly 3 minutes on Cerebras). On Groq's free tier, set `N_TRIALS = 1` in the notebook to stay within the daily token limit. The stage 5 notebook made 213 calls in its saved run (about 200,000 tokens; under 3 minutes on Cerebras); the count varies with how often the agent loops. On Groq's free tier, set `N_RUNS = 1` in its last section.
 
 ### From Python
 
@@ -518,8 +580,15 @@ These limitations define the next stages.
 
 - **Small and tidy.** 12 questions run 3 times each; a difference of one or two runs is within noise. The expected prices follow this stage's own tool rules (5% undercut, 10% premium, 10% floor, fixed elasticity coefficients), not market data.
 - **The judge is the same model as the agents.** That could favour its own style. The hand-labelled set and the code cross-check are what make its verdicts trustworthy here, and both are small.
-- **The tools are not yet in the recommender.** Stage 4 evaluates a tool-using agent on its own questions; wiring the tools and checks into the knowledge-base recommender is the next stage.
+- **The tools are not yet in the recommender.** Stage 4 evaluates a tool-using agent on its own questions; wiring the tools and checks into the knowledge-base recommender is a later stage.
 - **Illustrative costs.** The token counts are real, but the rates and the per-tool-call fee are examples. The tools are local functions and cost nothing.
+
+## Limitations of the self-correcting stage
+
+- **The checks are LLM judgements.** They disagree with themselves on identical text, passed a number borrowed from a guideline's example, and once rejected a cautious answer while passing a bolder one. They are a safety net, not proof.
+- **No exact arithmetic.** The graders don't catch small slips, such as $2,570 sold as a 30% margin when it gives 29.96%. Stage 4's tools and a code check of the price would.
+- **The prompt does much of the work.** With a strict generator prompt, plain RAG already admitted the grocery gap; the clearest gain from the loop came from rejecting off-topic documents.
+- **Small and separate.** Twenty hand-written entries and four test questions, with a knowledge base separate from stage 3's. Wiring these checks into the stage 3 recommender, with structured output and the stage 4 tools, is the next stage.
 
 ## License
 
