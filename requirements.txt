@@ -20,3 +20,6 @@ pandas
 langchain-openai>=1.0,<2
 numpy
 matplotlib
+
+# Stage 5: the self-correcting agent's state machine
+langgraph>=1.0,<2
