@@ -22,3 +22,6 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Agent logs (stage 6 --log)
+*_log.jsonl
