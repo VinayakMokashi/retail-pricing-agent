@@ -12,8 +12,7 @@ The project is built in stages, each in its own folder, so every stage can be ru
 | 4 | [`04_tools_and_evaluation/`](04_tools_and_evaluation/) | Tools and evaluation: three pricing tools, three prompt versions, and a framework that scores answers, tool use and cost on 12 questions run 3 times each | ✅ Done |
 | 5 | [`05_self_correcting_rag/`](05_self_correcting_rag/) | Self-correction: a LangGraph agent that grades its retrieval, checks its answers for unsupported numbers and usefulness, rewrites the question or the answer when a check fails, and is compared with plain RAG on cost and quality | ✅ Done |
 | 6 | [`06_validated_pricing_agent/`](06_validated_pricing_agent/) | Validation: stage 3's knowledge base, stage 4's calculations and stage 5's loop in one agent; the model chooses a price from a list the code calculates, as structured output, code enforces every pricing rule, and every answer is scored live | ✅ Done |
-
-**Project status: complete.** The six stages above are the whole project, and the repository is archived (read-only). The most useful next step would be real sales data, so elasticity could be measured per product rather than taken per category from a benchmark (stage 6's limitations explain why).
+| 7+ | — | Real sales data: elasticity measured per product rather than per category, and price changes checked against what happened | Planned |
 
 ## Repository structure
 
@@ -100,7 +99,7 @@ Stage 1 only knew the numbers typed into its prompt. Stage 2 gives the agent a d
 
 ### The price list
 
-[`pricing_guide.md`](02_rag_chunking/pricing_guide.md) is a fictional software price list ("DataFlow Platform"): three products with 10 plans, plus bundles, add-ons and billing policies. It makes a good test because plans in different products share names and prices (there are two Enterprise plans, and $99 buys either Analytics Pro or a seat of CRM Scale), and every price appears only in a header. This stage answers questions about a price list; it is not connected to the selling-price recommender in stage 1.
+[`pricing_guide.md`](02_rag_chunking/pricing_guide.md) is a fictional software price list ("DataFlow Platform"): three products with 10 plans, plus bundles, add-ons and billing policies. It makes a good test because plans in different products share names and prices (there are two Enterprise plans, and $99 buys either Analytics Pro or a seat of CRM Scale), and every price appears only in a header. This stage answers questions about a price list; it is not yet connected to the selling-price recommender in stage 1.
 
 ### How the agent works
 
@@ -707,7 +706,7 @@ print(result.judge)         # the LLM judge's scores
 - **No data.** The competitor price and the elasticity are single numbers typed in; there is no sales history or demand model behind them.
 - **Free-text output.** The recommended price has to be pattern-matched out of prose.
 
-Later stages address these.
+These limitations define the next stages.
 
 ## Limitations of the retrieval stage
 
@@ -728,7 +727,7 @@ Later stages address these.
 
 - **Small and tidy.** 12 questions run 3 times each; a difference of one or two runs is within noise. The expected prices follow this stage's own tool rules (5% undercut, 10% premium, 10% floor, fixed elasticity coefficients), not market data.
 - **The judge is the same model as the agents.** That could favour its own style. The hand-labelled set and the code cross-check are what make its verdicts trustworthy here, and both are small.
-- **The tools are not in the recommender.** Stage 4 evaluates a tool-using agent on its own questions; stage 6 wires the same calculations into the knowledge-base recommender.
+- **The tools are not yet in the recommender.** Stage 4 evaluates a tool-using agent on its own questions; stage 6 wires the same calculations into the knowledge-base recommender.
 - **Illustrative costs.** The token counts are real, but the rates and the per-tool-call fee are examples. The tools are local functions and cost nothing.
 
 ## Limitations of the self-correcting stage
