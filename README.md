@@ -319,12 +319,11 @@ Against a plain RAG pipeline (same retriever, prompt and model, no checks), over
 | LLM calls per question | 1 | 9.3 |
 | Tokens per question | 1.1k | 7.7k |
 | Time per question | 0.7 s | 5.2 s |
-| Answers the groundedness grader judged hallucinated | 4/12 | 1/12 |
 
 ### What the results showed
 
 - **The clearest win was a failed retrieval.** For the phone case, plain RAG got smartphone, headphone, Luxury and Footwear entries, then invented "30-40% for high-elasticity items" or borrowed the smartphone's 11% margin to suggest $4.49 for a $4 case. Self-RAG rejected those documents, rewrote the question and answered from the Electronics benchmark in all 3 runs.
-- **LLM graders are noisy on subtle cases.** An earlier version of the agent answered the grocery question with "$4.00, a 25% margin", taking the 25% from a guideline's worked example, and every grader passed it. Even with that mistake spelled out in its prompt, the groundedness grader still passed it 3 times out of 3 in the saved run. Identical answers got different verdicts, so the 4/12 vs 1/12 above is indicative at best (and circular for Self-RAG, whose answers had already passed the same grader).
+- **LLM graders are noisy on subtle cases.** An earlier version of the agent answered the grocery question with "$4.00, a 25% margin", taking the 25% from a guideline's worked example, and every grader passed it. Even with that mistake spelled out in its prompt, the groundedness grader still passed it 3 times out of 3 in the saved run. Identical answers got different verdicts. So this comparison gives no hallucination rate: the grader's verdicts on the two agents' answers are noisy, and circular for Self-RAG, whose answers had already passed the same grader.
 - **The fix that held was in the generator:** check for data on the product's own category before giving any number, at medium reasoning effort. At low effort the model skipped the check.
 - **A plain "regenerate" can spin.** It resends the same prompt, and at temperature 0 the model writes almost the same answer; an earlier run rejected its grocery answer 8 times in a row (31 calls). The retry limit, and feedback on what was rejected, end that.
 - **The cost is about 7-9× the calls and tokens of plain RAG.** That is worth it for a merchant-facing price, but not for low-stakes text.
@@ -386,7 +385,7 @@ From the run saved in the [notebook](06_validated_pricing_agent/validated_pricin
 
 | Live evaluation of the 14 answers | |
 | --- | --- |
-| Code checks passed (floor, band, price point, margin in the answer, citations) | 100% |
+| Code checks passed (floor, band, price point, margin in the answer, citations) | 100%, by construction: an answer that fails them cannot leave the agent, and code writes the margin |
 | Judge: follows the evidence / complete / clear | 86% / 100% / 100% |
 | Answered on the first attempt | 12 of 14; 2 sent back by the grounding check |
 | Rule-based fallbacks / LOW CONFIDENCE answers | 0 / 0 |
@@ -398,6 +397,8 @@ Stage 3's agent priced the same products (its own prompt and settings, the same 
 | --- | --- | --- |
 | Products with a pricing rule broken | **4 of 7** | **0 of 7** |
 | What broke | Sneakers at ₹2,599, 3.7% below the competitor where the High elasticity guideline allows 3%, stated as a 30.8% margin that is 30.74%; ₹3,200 and ₹2,420, which are not price points; the bike at ₹14,899, stated as a 32.4% margin that is 34.22% | — |
+
+Stage 6's 0 of 7 holds by construction, not by measurement: a price that breaks a rule cannot leave the agent. What this comparison measures is how often stage 3 broke the rules, with one run per product, judged by this stage's encoding of the guidelines.
 
 ### What the results showed
 
